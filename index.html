@@ -406,9 +406,6 @@
     <a id="link-guide">
       <svg viewBox="0 0 24 24"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H10a2 2 0 0 1 2 2v13a2 2 0 0 0-2-1.6H5.5A1.5 1.5 0 0 1 4 16z"/><path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H14a2 2 0 0 0-2 2v13a2 2 0 0 1 2-1.6h4.5A1.5 1.5 0 0 0 20 16z"/></svg>
       <span data-t="l_guide"></span></a>
-    <a id="link-deleg">
-      <svg viewBox="0 0 24 24"><path d="M12 3 4 6.5v5c0 4.6 3.2 8.7 8 9.5 4.8-.8 8-4.9 8-9.5v-5z"/><path d="M9.2 12.2l2 2 3.6-3.9"/></svg>
-      <span data-t="l_deleg"></span></a>
     <a id="link-how">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.8c0 1.7-2.4 2.4-2.4 2.4"/><path d="M12 17h.01"/></svg>
       <span data-t="l_how"></span></a>
@@ -500,15 +497,6 @@
   <div class="mlist" id="hist-list"></div>
 </div></div>
 
-<!-- account delegation (EIP-7702) -->
-<div class="modal" id="m-deleg"><div class="mcard">
-  <div class="mhead"><span data-t="m_deleg_t"></span><button class="mx" data-close>×</button></div>
-  <p class="mnote" data-t="deleg_body"></p>
-  <button class="sbtn" id="btn-deleg-scan" data-t="deleg_scan" style="width:100%"></button>
-  <div class="mlist" id="deleg-list"></div>
-  <div class="mnote" id="deleg-msg"></div>
-</div></div>
-
 <!-- how to use -->
 <div class="modal" id="m-guide"><div class="mcard">
   <div class="mhead"><span data-t="m_guide_t"></span><button class="mx" data-close>×</button></div>
@@ -573,17 +561,7 @@ ko:{
   cta_checking:"상태 확인 중…", cta_shut:"지금은 출금할 수 없습니다",
   cta_out:"Base로 출금", cta_in:"Arc로 입금", cta_in_confirm:"며칠 걸립니다. 계속하려면 한 번 더", cta_running:"진행 중…",
   trust:"비보관 · 모든 트랜잭션은 당신 지갑에서 서명 · 자금은 Circle 공식 컨트랙트로만 이동",
-  l_history:"기록", l_recover:"복구", l_how:"원리", l_cashout:"코인 정리", l_deleg:"계정 위임",
-  m_deleg_t:"계정 위임 (EIP-7702) 점검",
-  deleg_body:"지갑을 스마트 계정으로 업그레이드하면 계정이 어떤 컨트랙트에 위임됩니다. 각 체인의 실제 상태를 체인에서 직접 읽습니다. 해제는 지갑 안에서 하고, 여기서 해제됐는지 확인하십시오.",
-  deleg_scan:"체인별 상태 확인",
-  deleg_none:"위임 없음 (일반 지갑)",
-  deleg_yes:"위임됨",
-  deleg_known:"OKX 공식 SmartWalletEntry (감사 공개)",
-  deleg_unknown:"미확인 컨트랙트 — 직접 확인 필요",
-  deleg_nocode:"위임 대상에 코드 없음",
-  deleg_how:"해제 방법. OKX 지갑 홈에서 Smart Account 항목을 열고 Disable을 누르십시오. 체인마다 따로 해제해야 합니다. 해제한 뒤 위 버튼을 다시 눌러 확인하십시오.",
-  deleg_conn:"먼저 지갑을 연결하십시오.",
+  l_history:"기록", l_recover:"복구", l_how:"원리", l_cashout:"코인 정리",
   m_cashout_t:"남은 코인 USDC로 정리",
   co_intro:"Arc에 남은 토큰을 USDC로 바꿔 함께 출금하세요. 같은 이름의 토큰이 여럿일 수 있어 주소 끝 네 자리로 확인하고, 항상 USDC가 가장 많은 풀로 견적합니다.",
   co_scan:"보유 코인 스캔", co_scanning:"스캔 중…", co_none:"바꿀 토큰이 없습니다.",
@@ -691,17 +669,7 @@ en:{
   cta_checking:"Checking status…", cta_shut:"Withdrawals unavailable now",
   cta_out:"Withdraw to Base", cta_in:"Deposit to Arc", cta_in_confirm:"This takes days. Press again to continue", cta_running:"Working…",
   trust:"Non-custodial · every transaction is signed in your wallet · funds move only through Circle's official contracts",
-  l_history:"History", l_recover:"Recover", l_how:"How it works", l_cashout:"Cash out tokens", l_deleg:"Account delegation",
-  m_deleg_t:"Account delegation (EIP-7702)",
-  deleg_body:"Upgrading a wallet to a smart account delegates it to a contract. This reads the real state from each chain. Revoke inside your wallet, then come back here to confirm it took effect.",
-  deleg_scan:"Check every chain",
-  deleg_none:"Not delegated (plain wallet)",
-  deleg_yes:"Delegated",
-  deleg_known:"OKX official SmartWalletEntry (audits published)",
-  deleg_unknown:"Unrecognised contract — verify it yourself",
-  deleg_nocode:"Delegate address holds no code",
-  deleg_how:"To revoke: open Smart Account in the OKX wallet home and choose Disable. It is per chain. Then press the button above again to confirm.",
-  deleg_conn:"Connect a wallet first.",
+  l_history:"History", l_recover:"Recover", l_how:"How it works", l_cashout:"Cash out tokens",
   m_cashout_t:"Cash out leftover tokens",
   co_intro:"Swap tokens stranded on Arc into USDC so they can leave with you. Same-name tokens exist - check the last four address characters. Quotes always use the deepest USDC pool.",
   co_scan:"Scan holdings", co_scanning:"Scanning…", co_none:"Nothing to swap.",
@@ -809,17 +777,7 @@ zh:{
   cta_checking:"正在检查状态…", cta_shut:"当前无法提现",
   cta_out:"提现到 Base", cta_in:"充值到 Arc", cta_in_confirm:"需要数天，再按一次继续", cta_running:"进行中…",
   trust:"非托管 · 所有交易均在您的钱包中签名 · 资金仅经过 Circle 官方合约",
-  l_history:"记录", l_recover:"恢复", l_how:"原理", l_cashout:"清仓代币", l_deleg:"账户委托",
-  m_deleg_t:"账户委托 (EIP-7702) 检查",
-  deleg_body:"将钱包升级为智能账户会把账户委托给某个合约。此处直接从各链读取真实状态。请在钱包内解除委托，然后回到这里确认。",
-  deleg_scan:"逐链检查",
-  deleg_none:"未委托（普通钱包）",
-  deleg_yes:"已委托",
-  deleg_known:"OKX 官方 SmartWalletEntry（已公开审计）",
-  deleg_unknown:"未识别合约，需自行核实",
-  deleg_nocode:"委托地址没有代码",
-  deleg_how:"解除方法。在 OKX 钱包首页打开 Smart Account 并选择 Disable，需逐链解除。完成后再次点击上方按钮确认。",
-  deleg_conn:"请先连接钱包。",
+  l_history:"记录", l_recover:"恢复", l_how:"原理", l_cashout:"清仓代币",
   m_cashout_t:"把剩余代币换成 USDC",
   co_intro:"将滞留在 Arc 上的代币换成 USDC 一起提走。同名代币可能有多个，请核对地址末四位。报价始终使用 USDC 最深的池子。",
   co_scan:"扫描持仓", co_scanning:"扫描中…", co_none:"没有可换的代币。",
@@ -1118,7 +1076,7 @@ function listWallets(){
 }
 
 /* Shown in the footer so a stale cached page is obvious at a glance. */
-const BUILD="b86";
+const BUILD="b87";
 let PROVIDER=null, ACCT=null, WNAME="", DIR="out", RUNNING=false;
 let STATUS="checking", ATTEST={done:0,total:0}, LIMIT_ARC=1000000n;
 let ARC_BAL=null, BASE_BAL=null;
@@ -2500,65 +2458,6 @@ async function collectAll(burnHashes){
   return {redeemed,expected};
 }
 
-/* ============ account delegation (EIP-7702) ============ */
-/* A delegated EOA carries 0xef0100 followed by the 20-byte delegate address, so
-   the state is readable from any node and does not have to be taken on trust
-   from the wallet UI. Revoking is a wallet-side action that no page can perform,
-   but confirming that it actually happened is exactly what this is for. */
-const KNOWN_DELEGATES={
-  // Published in okxlabs/okx-smart-wallet-evm with audits; deployed on Ethereum,
-  // X Layer, Base, Optimism, Arbitrum, BSC and Polygon. Notably NOT on Arc.
-  "0xe40ccb2d94975c51bff0c004efdfd9b3a5796fa4":"deleg_known"
-};
-function delegChains(){
-  const list=[{name:"Arc",rpcs:ARC_RPCS}];
-  for(const s of SOURCES) list.push({name:s.name,rpcs:s.rpcs});
-  return list;
-}
-// Each scan is many awaited round trips, so a second one started while the
-// first is still walking chains would append its rows alongside them. Only the
-// newest scan is allowed to write.
-let DELEG_SCAN=0;
-async function scanDelegation(){
-  if(!ACCT){ $("deleg-msg").textContent=t("deleg_conn"); return; }
-  const my=++DELEG_SCAN;
-  $("deleg-msg").textContent="…";
-  $("deleg-list").innerHTML="";
-  let anyDelegated=false;
-  // Collect first and paint once. Writing rows as they arrive lets a superseded
-  // scan land a row between awaits, which showed up as duplicate chains.
-  const rows=[];
-  for(const c of delegChains()){
-    if(my!==DELEG_SCAN) return;
-    let code=null;
-    try{ code=await rpcVia(c.rpcs,"eth_getCode",[ACCT,"latest"]); }catch(e){}
-    let right,cls="",note="";
-    if(code===null||code===undefined){ right="?"; }
-    else if(code==="0x"){ right=t("deleg_none"); cls="ok"; }
-    else{
-      const s=code.toLowerCase();
-      if(s.startsWith("0xef0100")){
-        anyDelegated=true;
-        const to="0x"+s.slice(8,48);
-        const key=KNOWN_DELEGATES[to];
-        // A delegate with no code is not a drain risk, but nothing works
-        // through it either, so say that rather than calling it fine.
-        note=key?t(key):t("deleg_unknown");
-        try{ const dc=await rpcVia(c.rpcs,"eth_getCode",[to,"latest"]);
-          if(dc==="0x") note=t("deleg_nocode"); }catch(e){}
-        right=t("deleg_yes")+" · "+short(to);
-        cls=key?"warn":"bad";
-      }else{ right="contract account"; cls="warn"; }
-    }
-    rows.push('<div class="hrow"><span class="l">'+esc(c.name)
-      +(note?'<span class="sub" style="display:block">'+esc(note)+'</span>':"")
-      +'</span><span class="pill '+cls+'">'+esc(right)+'</span></div>');
-  }
-  if(my!==DELEG_SCAN) return;
-  $("deleg-list").innerHTML=rows.join("");
-  $("deleg-msg").textContent=anyDelegated?t("deleg_how"):"";
-}
-
 /* ============ recover ============ */
 /* One burn tx from the batch contract carries MANY messages (up to 600 user
    pieces plus the fee pieces), so recovery walks every message in the tx,
@@ -3023,9 +2922,6 @@ $("first-open").onclick=()=>{ openM("m-guide"); markGuideSeen(); };
 if(!seenGuide()){ const el=$("first-hint"); if(el) el.hidden=false; }
 
 $("link-how").onclick=()=>openM("m-how");
-$("link-deleg").onclick=()=>{ $("deleg-msg").textContent=""; $("deleg-list").innerHTML="";
-  openM("m-deleg"); if(ACCT) scanDelegation(); };
-$("btn-deleg-scan").onclick=()=>scanDelegation();
 $("btn-detect").onclick=()=>detectPending().catch(e=>{$("pending").textContent=e.message;});
 $("btn-recover").onclick=()=>recover(true);
 $("btn-check").onclick=()=>recover(false);
