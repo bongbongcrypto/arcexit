@@ -1,4 +1,5 @@
-Contact: https://arcexit.com/
+Contact: https://x.com/bongbongcrypto
+Contact: https://github.com/bongbongcrypto/arcexit/issues
 Expires: 2027-08-14T00:00:00.000Z
 Preferred-Languages: en, ko
 Canonical: https://arcexit.com/.well-known/security.txt
