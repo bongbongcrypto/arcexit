@@ -1,0 +1,8 @@
+/*
+  Cache-Control: no-store
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  X-Frame-Options: DENY
+  Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=()
+  Cross-Origin-Opener-Policy: same-origin
+  Content-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src https://iris-api.circle.com https://*.unstabletrade.com https://sharc.fun https://mainnet.base.org https://*.llamarpc.com https://*.publicnode.com https://arb1.arbitrum.io https://api.avax.network https://polygon-rpc.com https://eth.llamarpc.com; base-uri 'none'; form-action 'none'; frame-ancestors 'none'

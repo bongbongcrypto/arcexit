@@ -1,0 +1,3020 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Single-file app: a cached copy silently serves old code, so never cache. -->
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta name="description" content="Move USDC between Arc mainnet and Base with Circle CCTP v2. Non-custodial: every transaction is signed in your own wallet, funds only touch Circle's official contracts.">
+<meta property="og:title" content="Arc Bridge">
+<meta property="og:description" content="USDC in and out of Arc mainnet via Circle CCTP. Non-custodial, no server.">
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.6" fill="none" stroke="%234c82fb" stroke-width="3.1" stroke-linecap="round" stroke-dasharray="38 16" transform="rotate(-50 12 12)"/></svg>'>
+<title>Arc Bridge · USDC between Arc and Base</title>
+<style>
+  :root{
+    /* Restrained, single-accent palette. An earlier version leaned on a
+       blue-to-violet gradient everywhere, which is the giveaway of a template
+       rather than a product. One accent, used sparingly, reads as considered. */
+    --bg:#0a0b0e; --card:#131519; --box:#1a1d23; --boxh:#20242b;
+    --line:#24272f; --line2:#333844;
+    --text:#f0f2f5; --dim:#9aa1ad; --dim2:#666d7a;
+    --acc:#3d7bfd; --acc-dim:rgba(61,123,253,.12);
+    --ok:#25c07f; --warn:#e79c3c; --bad:#ec5f5f;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font:15px/1.55 ui-sans-serif,system-ui,"Segoe UI",Roboto,"Noto Sans KR","Noto Sans SC",sans-serif;
+       -webkit-font-smoothing:antialiased}
+  .bgfx{position:fixed;inset:0;pointer-events:none;z-index:0;background:
+    radial-gradient(760px 420px at 50% -12%, rgba(61,123,253,.07), transparent 68%)}
+  header,main,footer{position:relative;z-index:1}
+
+  header{display:flex;align-items:center;justify-content:space-between;gap:12px;
+         max-width:1100px;margin:0 auto;padding:18px 20px}
+  .brand{display:flex;align-items:center;gap:10px;font-size:17px;font-weight:700;letter-spacing:.2px}
+  .brand svg{display:block}
+  .hright{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+  .statuspill{display:flex;align-items:center;gap:7px;padding:7px 12px;border-radius:999px;
+    background:var(--box);border:1px solid var(--line);font-size:12.5px;color:var(--dim);cursor:pointer;
+    user-select:none}
+  .statuspill .dot{width:7px;height:7px;border-radius:50%;background:var(--dim2)}
+  .statuspill.open .dot{background:var(--ok);box-shadow:0 0 6px rgba(37,192,127,.8)}
+  .statuspill.open{color:var(--ok);border-color:rgba(37,192,127,.35)}
+  .statuspill.shut .dot{background:var(--bad)}
+  .statuspill.shut{color:var(--bad);border-color:rgba(236,95,95,.35)}
+  .statuspill.unknown .dot{background:var(--warn)}
+  .lang{display:flex;border:1px solid var(--line);border-radius:999px;overflow:hidden}
+  .lang button{background:transparent;border:0;color:var(--dim2);padding:6px 11px;font-size:12px;
+    cursor:pointer;font-weight:600}
+  .lang button.on{background:var(--box);color:var(--text)}
+  .wbtn{display:flex;align-items:center;gap:8px;background:var(--box);border:1px solid var(--line);
+    color:var(--text);border-radius:999px;padding:8px 15px;font:inherit;font-size:13.5px;font-weight:600;
+    cursor:pointer}
+  .wbtn:hover{border-color:var(--line2)}
+  .wbtn .dot{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+  .wbtn.cta-like{background:var(--acc);border:0;color:#fff}
+
+  main{max-width:1100px;margin:0 auto;padding:26px 16px 40px}
+  .card{width:min(440px,100%);margin:0 auto;background:var(--card);
+    border:1px solid var(--line);border-radius:18px;padding:14px;
+    box-shadow:0 1px 0 rgba(255,255,255,.03) inset, 0 18px 50px rgba(0,0,0,.4)}
+  .card-head{display:flex;align-items:center;justify-content:space-between;
+    padding:4px 6px 12px;font-size:14.5px;font-weight:600;letter-spacing:-.01em}
+  .iconbtn{background:transparent;border:0;color:var(--dim2);cursor:pointer;
+    padding:5px;border-radius:8px;line-height:0;display:inline-flex}
+  .iconbtn svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.7;
+    stroke-linecap:round;stroke-linejoin:round}
+  .iconbtn:hover{color:var(--text);background:var(--box)}
+  .iconbtn.spin{animation:sp 1s linear infinite}
+  /* in-flight transfer strip: the answer to "did my money actually move?" */
+  .flight{display:flex;align-items:center;gap:10px;background:rgba(61,123,253,.07);
+    border:1px solid rgba(61,123,253,.28);border-radius:12px;padding:10px 13px;margin-bottom:10px;
+    font-size:12.5px;line-height:1.5}
+  .flight.done{background:rgba(37,192,127,.08);border-color:rgba(37,192,127,.35)}
+  .flight.stale{background:rgba(231,156,60,.08);border-color:rgba(231,156,60,.35)}
+  .flight .spinner{width:13px;height:13px;flex:0 0 auto;border-radius:50%;
+    border:2px solid rgba(61,123,253,.3);border-top-color:var(--acc);animation:sp .9s linear infinite}
+  .flight .tick{width:13px;height:13px;flex:0 0 auto;color:var(--ok)}
+  .flight .body{flex:1;min-width:0}
+  .flight .body b{color:var(--text);font-weight:600}
+  .flight .sub{color:var(--dim2);font-size:11.5px}
+  .flight .act{flex:0 0 auto;background:var(--box);border:1px solid var(--line);color:var(--text);
+    border-radius:8px;padding:5px 10px;font:600 11.5px inherit;cursor:pointer}
+  @keyframes sp{to{transform:rotate(360deg)}}
+
+  .box{background:var(--box);border:1px solid transparent;border-radius:14px;padding:14px 15px;
+    transition:border-color .13s}
+  .box:focus-within{border-color:var(--line2)}
+  .box+.swapwrap+.box{margin-top:0}
+  .box-top{display:flex;justify-content:space-between;align-items:center;
+    font-size:12.5px;color:var(--dim2);margin-bottom:8px}
+  .baltext b{color:var(--dim);font-weight:600}
+  .maxb{background:rgba(61,123,253,.15);border:0;color:var(--acc);font-size:11px;font-weight:700;
+    border-radius:6px;padding:2px 7px;margin-left:6px;cursor:pointer}
+  .maxb:hover{background:rgba(61,123,253,.25)}
+  .box-main{display:flex;align-items:center;gap:10px}
+  .chip{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);
+    border-radius:999px;padding:7px 14px 7px 8px;flex:0 0 auto;user-select:none}
+  .chip b{font-size:14.5px;font-weight:600;letter-spacing:-.01em}
+  .chip.pickable{cursor:pointer}
+  .chip.pickable:hover{border-color:var(--line2)}
+  .chip .caret{color:var(--dim2);font-size:10px;margin-left:2px}
+  .chip small{color:var(--dim2);font-size:10.5px;font-weight:600;margin-left:3px;letter-spacing:.02em}
+  #amount{flex:1;min-width:0;background:transparent;border:0;outline:0;color:var(--text);
+    font:500 28px/1.2 inherit;letter-spacing:-.02em;text-align:right;padding:0}
+  #amount::placeholder{color:var(--dim2)}
+  .recv{flex:1;min-width:0;text-align:right;font:500 28px/1.2 inherit;letter-spacing:-.02em;
+    color:var(--dim2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .recv.haveamt{color:var(--text)}
+
+  .swapwrap{height:10px;position:relative;z-index:2}
+  #dirswap{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+    width:34px;height:34px;border-radius:11px;background:var(--boxh);border:4px solid var(--card);
+    color:var(--dim);cursor:pointer;display:flex;align-items:center;justify-content:center;
+    transition:transform .25s ease,color .13s,background .13s;padding:0}
+  #dirswap:hover{color:var(--text);background:#272c35}
+  #dirswap.flip{transform:translate(-50%,-50%) rotate(180deg)}
+
+  .details{margin:12px 4px 4px;font-size:13px}
+  .drow{display:flex;justify-content:space-between;gap:14px;padding:5px 2px;color:var(--dim2)}
+  .drow>span:last-child{color:var(--dim);text-align:right;font-variant-numeric:tabular-nums;
+    word-break:break-all}
+  .drow.warn>span:last-child{color:var(--warn)}
+  .linkbtn{background:none;border:0;color:var(--acc);font:inherit;font-size:11.5px;
+    cursor:pointer;padding:0 0 0 8px;text-decoration:underline}
+  .addrwarn{display:block;font-size:11.5px;margin-top:5px;line-height:1.5}
+  .addrwarn.bad{color:var(--bad)}
+  .addrwarn.ok{color:var(--warn)}
+  .hint{margin:8px 6px 2px;font-size:12px;color:var(--dim2);line-height:1.5}
+  .hint.caution{color:var(--text);background:rgba(231,156,60,.09);
+    border:1px solid rgba(231,156,60,.32);border-radius:10px;padding:10px 12px;margin:10px 2px 2px}
+  .hint.caution b{color:var(--warn)}
+
+  .prog{margin:12px 4px 2px;border-top:1px solid var(--line);padding-top:12px}
+  .steps{margin:0;padding:0;list-style:none;counter-reset:s}
+  .steps li{position:relative;padding:7px 0 7px 34px;font-size:13.5px;color:var(--dim)}
+  .steps li::before{counter-increment:s;content:counter(s);position:absolute;left:0;top:6px;
+    width:22px;height:22px;border-radius:50%;background:var(--box);color:var(--dim2);
+    display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:700}
+  .steps li.active{color:var(--text)}
+  .steps li.active::before{background:rgba(61,123,253,.2);color:var(--acc)}
+  .steps li.done{color:var(--dim)}
+  .steps li.done::before{content:"✓";background:rgba(37,192,127,.15);color:var(--ok)}
+  .steps li.fail::before{content:"!";background:rgba(236,95,95,.15);color:var(--bad)}
+  .steps .note{color:var(--dim2);font-size:12px;margin-left:6px}
+  .runmsg{font-size:13px;color:var(--dim);margin-top:8px;line-height:1.6;word-break:break-all}
+  .rbn{border-radius:12px;padding:12px 14px;font-size:13px;line-height:1.65;margin-top:10px;
+    word-break:break-word}
+  .rbn.ok{background:rgba(37,192,127,.1);border:1px solid rgba(37,192,127,.4);color:var(--text)}
+  .rbn.bad{background:rgba(236,95,95,.1);border:1px solid rgba(236,95,95,.4);color:var(--text)}
+  .rbn.warn{background:rgba(231,156,60,.1);border:1px solid rgba(231,156,60,.4);color:var(--text)}
+  .rbn.wait{background:rgba(61,123,253,.08);border:1px solid rgba(61,123,253,.3);color:var(--text)}
+
+  .cta{width:100%;margin-top:12px;height:52px;border:0;border-radius:13px;cursor:pointer;
+    font:600 15.5px inherit;letter-spacing:-.01em;color:#fff;background:var(--acc);
+    transition:background .13s}
+  .cta:hover:not(:disabled){background:#3570e8}
+  .cta:disabled{background:var(--box);color:var(--dim2);cursor:not-allowed}
+  .cta.danger{background:var(--boxh);color:var(--bad)}
+  .trust{margin:10px 6px 2px;text-align:center;font-size:11.5px;color:var(--dim2);line-height:1.6}
+
+  /* These are actions, so they must read as buttons - plain underlined-looking
+     text got mistaken for legal fine print. Line icons, never emoji. */
+  .links{display:flex;justify-content:center;gap:8px;margin-top:16px;font-size:13px;flex-wrap:wrap}
+  .links a{color:var(--dim);cursor:pointer;text-decoration:none;position:relative;
+    display:inline-flex;align-items:center;gap:7px;background:var(--box);
+    border:1px solid var(--line);border-radius:10px;padding:9px 14px;font-weight:600;
+    transition:color .13s,border-color .13s}
+  .links a:hover{color:var(--text);border-color:var(--line2)}
+  .links a svg{width:15px;height:15px;flex:0 0 auto;fill:none;stroke:currentColor;
+    stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;opacity:.85}
+  .links a .badge{position:absolute;top:-3px;right:-3px;width:8px;height:8px;border-radius:50%;
+    background:var(--warn);border:2px solid var(--bg)}
+
+  footer{max-width:1100px;margin:0 auto;padding:12px 20px 26px;color:var(--dim2);
+    font-size:12px;text-align:center;line-height:1.7}
+  .verify{margin-top:8px;display:flex;flex-wrap:wrap;gap:6px 14px;justify-content:center;
+    font-size:11.5px}
+  .verify a{color:var(--dim);text-decoration:none;border-bottom:1px dotted var(--line2)}
+  .verify a:hover{color:var(--acc)}
+
+  .modal{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;
+    background:rgba(4,6,10,.6);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);
+    padding:16px}
+  .modal.open{display:flex}
+  .mcard{width:min(388px,100%);max-height:86vh;overflow:auto;background:#14171e;
+    border:1px solid var(--line);border-radius:18px;padding:18px;
+    animation:up .18s ease}
+  @keyframes up{from{transform:translateY(10px);opacity:0}to{transform:none;opacity:1}}
+  .mhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;
+    font-size:15.5px;font-weight:700}
+  .mx{background:var(--box);border:0;color:var(--dim);width:28px;height:28px;border-radius:9px;
+    cursor:pointer;font-size:15px;line-height:1}
+  .mx:hover{color:var(--text)}
+  .mlist{display:flex;flex-direction:column;gap:8px}
+  .mlist button{display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+    background:#191d26;border:1px solid transparent;border-radius:12px;padding:12px 14px;
+    color:var(--text);font:600 14.5px inherit;cursor:pointer}
+  .mlist button:hover{border-color:var(--acc)}
+  .mlist img,.mlist .wicon{width:30px;height:30px;border-radius:8px;flex:0 0 auto}
+  .wicon{background:var(--boxh);display:flex;align-items:center;justify-content:center;
+    color:var(--dim);font-size:14px}
+  .mlist button>span:nth-child(2){flex:1;min-width:0}
+  .mlist .sub{display:block;font-weight:500;font-size:11.5px;color:var(--dim2);margin-top:1px}
+  .wtag{flex:0 0 auto;font-size:10.5px;font-weight:700;color:var(--ok);
+    background:rgba(37,192,127,.12);border-radius:999px;padding:3px 9px}
+  .txl{color:var(--acc);text-decoration:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .txl:hover{text-decoration:underline}
+  /* cash-out token rows */
+  .corow{background:#191d26;border:1px solid var(--line);border-radius:12px;padding:11px 13px;margin-top:8px}
+  .cotop{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+  .cotop b{font-size:14.5px} .cotop .tail{color:var(--dim2);font-size:11px;margin-left:4px}
+  .cotop .amt{text-align:right} .cotop .amt b{color:var(--ok)}
+  .cometa{display:flex;justify-content:space-between;gap:10px;margin-top:6px;font-size:11.5px;color:var(--dim2)}
+  .slip{font-weight:700}
+  .slip.low{color:var(--ok)} .slip.mid{color:var(--warn)} .slip.high{color:var(--bad)} .slip.vhigh{color:var(--bad)}
+  .cowarn{font-size:11.5px;margin-top:6px;line-height:1.5;color:var(--warn)}
+  .cowarn.vhigh{color:var(--bad)}
+  .cobtns{display:flex;gap:8px;margin-top:8px}
+  .cobtns .sbtn{flex:1;padding:8px 10px;font-size:12.5px}
+  .cohead{display:flex;justify-content:space-between;align-items:center;margin:12px 2px 2px;
+    font-size:13px;color:var(--dim)}
+  .mnote{font-size:13px;color:var(--dim);line-height:1.65;margin:10px 0}
+  .mnote.err{color:var(--bad)}
+  .mrow{display:flex;gap:8px;margin-top:10px}
+  .sbtn{flex:1;background:var(--box);border:1px solid var(--line);color:var(--text);
+    border-radius:11px;padding:11px 13px;font:600 13.5px inherit;cursor:pointer}
+  .sbtn:hover{border-color:var(--line2)}
+  .sbtn.primary{background:var(--acc);border:0;color:#fff}
+  .sbtn:disabled{opacity:.4;cursor:not-allowed}
+  .maddr{background:var(--box);border-radius:11px;padding:11px 13px;font-size:12.5px;
+    word-break:break-all;color:var(--dim);margin-bottom:10px}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px}
+  input.tx{width:100%;background:var(--box);border:1px solid var(--line);color:var(--text);
+    border-radius:11px;padding:11px 13px;font:inherit;font-size:13px}
+  input.tx:focus{outline:0;border-color:var(--line2)}
+  .hrow{display:flex;justify-content:space-between;align-items:center;gap:10px;
+    background:#191d26;border-radius:12px;padding:11px 14px;font-size:13px}
+  .hrow .l{color:var(--dim)}
+  .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:700}
+  .pill.ok{background:rgba(37,192,127,.13);color:var(--ok)}
+  .pill.warn{background:rgba(231,156,60,.13);color:var(--warn)}
+  .pill.bad{background:rgba(236,95,95,.13);color:var(--bad)}
+  .krow{display:flex;justify-content:space-between;gap:12px;padding:6px 0;font-size:12.5px;
+    border-bottom:1px solid rgba(255,255,255,.04)}
+  .krow:last-child{border-bottom:0}
+  .krow span:first-child{color:var(--dim2)}
+  .krow span:last-child{color:var(--dim);word-break:break-all;text-align:right}
+
+  @media (max-width:560px){
+    /* Phones: one row for identity, one for controls, and touch targets at or
+       near the 44px both platforms ask for. */
+    /* Two tidy rows: identity + connect on top, status + language beneath.
+       Letting all three controls share one wrapped row made the header taller,
+       not shorter. */
+    header{padding:12px 14px 6px;display:grid;
+      grid-template-columns:1fr auto;grid-template-areas:"brand wallet" "status lang";
+      gap:8px 10px;align-items:center}
+    .brand{grid-area:brand;font-size:16px}
+    .hright{display:contents}
+    .statuspill{grid-area:status;justify-self:start;padding:8px 12px}
+    .lang{grid-area:lang;justify-self:end}
+    .lang button{padding:9px 13px;font-size:12.5px}
+    #h-wallet{grid-area:wallet;justify-self:end;padding:10px 15px}
+    main{padding:6px 12px 32px}
+    .card{padding:12px;border-radius:16px}
+    /* 16px keeps iOS from zooming the page when the field is focused. */
+    #amount,.recv{font-size:26px}
+    input.tx{font-size:16px}
+    /* Padding rather than height, so the row keeps its shape while the tap
+       area grows to something a thumb can hit. */
+    .maxb{padding:8px 11px;font-size:11.5px;margin-left:8px}
+    .iconbtn{padding:10px}
+    #dirswap{width:40px;height:40px}
+    .links{gap:8px}
+    .links a{flex:1 1 calc(50% - 4px);justify-content:center;padding:12px 10px}
+    .mcard{padding:16px;border-radius:16px;max-height:88vh}
+    .sbtn{padding:13px 13px}
+    .cobtns .sbtn{padding:11px 10px}
+    .flight{padding:11px 12px}
+    footer{padding:10px 16px 22px}
+  }
+  /* Respect the iPhone home indicator / notch. */
+  @supports(padding:max(0px)){
+    body{padding-left:max(0px,env(safe-area-inset-left));
+         padding-right:max(0px,env(safe-area-inset-right))}
+    footer{padding-bottom:max(22px,env(safe-area-inset-bottom))}
+  }
+  /* On touch input, hover styling sticks after a tap; only apply it to mice. */
+  @media (hover:none){
+    .links a:hover,.sbtn:hover,.wbtn:hover{border-color:var(--line)}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{animation-duration:.01ms !important;transition-duration:.01ms !important}
+  }
+.lnk{background:none;border:0;color:var(--acc);cursor:pointer;padding:0 2px;font:inherit;text-decoration:underline}
+.gstep{border-left:2px solid var(--line2);padding:2px 0 2px 12px;margin:12px 0}
+.gstep b{display:block;color:var(--text);font-size:14px;margin-bottom:3px}
+.gstep span{color:var(--dim);font-size:13px;line-height:1.55}
+.firsthint{margin:10px 0 0;padding:10px 12px;border:1px solid var(--line2);border-radius:10px;
+  background:var(--box);color:var(--dim);font-size:13px;line-height:1.55;display:flex;
+  justify-content:space-between;gap:10px;align-items:center}
+.firsthint button{flex:0 0 auto}
+</style>
+</head>
+<body>
+<div class="bgfx"></div>
+
+<header>
+  <div class="brand">
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+      <defs><linearGradient id="lg" x1="0" y1="0" x2="24" y2="24">
+        <stop offset="0" stop-color="#4c82fb"/><stop offset="1" stop-color="#6f5bff"/></linearGradient></defs>
+      <circle cx="12" cy="12" r="8.6" stroke="url(#lg)" stroke-width="3.1"
+        stroke-linecap="round" stroke-dasharray="38 16" transform="rotate(-50 12 12)"/>
+    </svg>
+    Arc Bridge
+  </div>
+  <div class="hright">
+    <div class="statuspill" id="h-status"><span class="dot"></span><span id="h-status-t">…</span></div>
+    <div class="lang">
+      <button data-lang="ko" class="on">한국어</button><button data-lang="en">EN</button><button data-lang="zh">中文</button>
+    </div>
+    <button class="wbtn cta-like" id="h-wallet" data-t="cta_connect"></button>
+  </div>
+</header>
+
+<main>
+  <div class="card">
+    <div class="card-head"><span data-t="bridge"></span>
+      <button class="iconbtn" id="refresh" title="refresh">
+        <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
+      </button></div>
+
+    <!-- transfers still in flight, restored from localStorage on load -->
+    <div id="inflight"></div>
+
+    <div class="box">
+      <div class="box-top"><span data-t="from"></span>
+        <span class="baltext"><span data-t="bal"></span> <b id="from-bal">0.00</b><button class="maxb" id="maxbtn">MAX</button></span></div>
+      <div class="box-main">
+        <div class="chip" id="from-chain"></div>
+        <input id="amount" placeholder="0" inputmode="decimal" autocomplete="off" spellcheck="false">
+      </div>
+    </div>
+
+    <div class="swapwrap">
+      <button id="dirswap" aria-label="switch direction">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 2v9M5 11l-2.4-2.4M5 11l2.4-2.4M11 14V5M11 5l-2.4 2.4M11 5l2.4 2.4"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="box">
+      <div class="box-top"><span data-t="to"></span>
+        <span class="baltext"><span data-t="bal"></span> <b id="to-bal">0.00</b></span></div>
+      <div class="box-main">
+        <div class="chip" id="to-chain"></div>
+        <div class="recv" id="receive">0</div>
+      </div>
+    </div>
+
+    <div class="details">
+      <div class="drow"><span data-t="d_addr"></span>
+        <span><span id="det-addr" class="mono">지갑 연결 후 표시</span>
+        <button id="addr-edit" class="linkbtn" data-t="d_addr_edit"></button></span></div>
+      <!-- Sending to a different wallet than the one signing is a normal need
+           (exchange deposit, cold storage), and getting it wrong is
+           unrecoverable, so the address is shown back in full and checked
+           before anything is signed. -->
+      <div class="drow" id="row-custaddr" hidden><span></span>
+        <span style="flex:1"><input id="custaddr" class="tx" spellcheck="false"
+          autocomplete="off" placeholder="0x..."><span id="addr-warn" class="addrwarn"></span></span></div>
+      <div class="drow"><span data-t="d_fee"></span><span id="det-fee">0</span></div>
+      <div class="drow"><span data-t="d_route"></span><span id="det-route">Circle CCTP v2</span></div>
+      <div class="drow"><span data-t="d_time"></span><span id="det-time">~2분</span></div>
+      <div class="drow" id="row-split" hidden><span data-t="d_split"></span><span id="det-split"></span></div>
+      <div class="mnote" id="split-tip" hidden style="margin:-2px 0 6px"></div>
+      <div class="drow"><span data-t="d_status"></span><span id="det-status">확인 중</span></div>
+    </div>
+    <div class="firsthint" id="first-hint" hidden><span data-t="g_first"></span><button class="sbtn" id="first-open" style="padding:6px 12px" data-t="l_guide"></button></div>
+    <div class="hint" id="dir-hint"></div>
+
+    <div class="prog" id="prog" hidden>
+      <ol class="steps" id="steps"></ol>
+      <div class="runmsg" id="run-msg"></div>
+    </div>
+
+    <button class="cta" id="cta" disabled></button>
+    <div class="trust" data-t="trust"></div>
+  </div>
+
+  <div class="links">
+    <a id="link-cashout">
+      <svg viewBox="0 0 24 24"><path d="M7 10h13M17 6l4 4-4 4"/><path d="M17 18H4M7 14l-4 4 4 4"/></svg>
+      <span data-t="l_cashout"></span></a>
+    <a id="link-history">
+      <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 8v4l3 2"/></svg>
+      <span data-t="l_history"></span></a>
+    <a id="link-recover">
+      <svg viewBox="0 0 24 24"><path d="M12 3v6M12 21v-6"/><path d="M4.9 7.5 9 10M19.1 16.5 15 14M4.9 16.5 9 14M19.1 7.5 15 10"/><circle cx="12" cy="12" r="3.2"/><circle cx="12" cy="12" r="9"/></svg>
+      <span data-t="l_recover"></span><span class="badge" id="rec-badge" hidden></span></a>
+    <a id="link-guide">
+      <svg viewBox="0 0 24 24"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H10a2 2 0 0 1 2 2v13a2 2 0 0 0-2-1.6H5.5A1.5 1.5 0 0 1 4 16z"/><path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H14a2 2 0 0 0-2 2v13a2 2 0 0 1 2-1.6h4.5A1.5 1.5 0 0 0 20 16z"/></svg>
+      <span data-t="l_guide"></span></a>
+    <a id="link-deleg">
+      <svg viewBox="0 0 24 24"><path d="M12 3 4 6.5v5c0 4.6 3.2 8.7 8 9.5 4.8-.8 8-4.9 8-9.5v-5z"/><path d="M9.2 12.2l2 2 3.6-3.9"/></svg>
+      <span data-t="l_deleg"></span></a>
+    <a id="link-how">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.8c0 1.7-2.4 2.4-2.4 2.4"/><path d="M12 17h.01"/></svg>
+      <span data-t="l_how"></span></a>
+  </div>
+</main>
+
+<!-- Wallet security vendors flag new crypto domains by default, and a reviewer
+     needs something checkable to clear one. This footer states, in public, the
+     only contracts the page can touch, so anyone can verify on-chain that the
+     site is not a drainer rather than taking our word for it. -->
+<footer>
+  <span data-t="foot"></span> <span id="build" class="mono"></span>
+  <div class="verify">
+    <span data-t="v_title"></span>
+    <a href="https://arc.exploreme.pro/address/0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d"
+       target="_blank" rel="noopener">TokenMessengerV2</a>
+    <a href="https://arc.exploreme.pro/address/0x81D40F21F12A8F0E3252Bccb954D722d4c464B64"
+       target="_blank" rel="noopener">MessageTransmitterV2</a>
+    <a href="https://developers.circle.com/stablecoins/cctp-getting-started"
+       target="_blank" rel="noopener">Circle CCTP</a>
+    <!-- The two contracts this site published itself. Listing only Circle's
+         while quietly calling our own is exactly the discrepancy a reviewer
+         would hold against us, and a user cannot check what they cannot see. -->
+    <a href="https://arc.exploreme.pro/address/0x83839c096c71f3af1732a3685adc1c33db8f661d"
+       target="_blank" rel="noopener">ArcBatchExit</a>
+    <a href="https://basescan.org/address/0x174a6cf1382a2e496dbc642461711b59e5d4e0b7"
+       target="_blank" rel="noopener">ArcClaimBatch</a>
+    <a href="https://github.com/bongbongcrypto/arcexit"
+       target="_blank" rel="noopener" data-t="v_source"></a>
+  </div>
+</footer>
+
+<!-- wallet picker -->
+<div class="modal" id="m-wallet"><div class="mcard">
+  <div class="mhead"><span data-t="m_wallet_t"></span><button class="mx" data-close>×</button></div>
+  <div class="mlist" id="w-list"></div>
+</div></div>
+
+<!-- wallet menu -->
+<div class="modal" id="m-menu"><div class="mcard">
+  <div class="mhead"><span data-t="m_menu_t"></span><button class="mx" data-close>×</button></div>
+  <div class="maddr mono" id="mm-addr"></div>
+  <div class="mrow">
+    <button class="sbtn" id="mm-copy" data-t="mm_copy"></button>
+    <button class="sbtn" id="mm-switch" data-t="mm_switch"></button>
+  </div>
+  <div class="mrow"><button class="sbtn" id="mm-disc" data-t="mm_disc"></button></div>
+</div></div>
+
+<!-- cash out leftover tokens -->
+<div class="modal" id="m-cashout"><div class="mcard" style="width:min(430px,100%)">
+  <div class="mhead"><span data-t="m_cashout_t"></span><button class="mx" data-close>×</button></div>
+  <p class="mnote" data-t="co_intro"></p>
+  <button class="sbtn" id="co-scan" data-t="co_scan" style="width:100%"></button>
+  <div id="co-list" style="margin-top:10px"></div>
+  <div class="mnote" id="co-msg"></div>
+</div></div>
+
+<!-- recover -->
+<div class="modal" id="m-src"><div class="mcard">
+  <div class="mhead"><span data-t="src_pick"></span><button class="mx" data-close>&#215;</button></div>
+  <div class="mlist" id="src-list"></div>
+  <div class="mnote" id="src-note"></div>
+</div></div>
+<div class="modal" id="m-recover"><div class="mcard">
+  <div class="mhead"><span data-t="m_recover_t"></span><button class="mx" data-close>×</button></div>
+  <p class="mnote" data-t="rec_body"></p>
+  <button class="sbtn primary" id="btn-detect" data-t="rec_detect" style="width:100%"></button>
+  <div class="mnote" id="rec-prog"></div>
+  <div class="mnote" id="pending"></div>
+  <div class="mnote" id="rec-msg"></div>
+  <a id="rec-manual-t" class="sub" style="display:block;margin-top:14px;cursor:pointer;text-decoration:underline" data-t="rec_manual"></a>
+  <div id="rec-manual" hidden>
+    <input class="tx mono" id="burntx" placeholder="0x… (burn tx hash)">
+    <div class="mrow">
+      <button class="sbtn primary" id="btn-recover" data-t="rec_go"></button>
+      <button class="sbtn" id="btn-check" data-t="rec_check"></button>
+    </div>
+  </div>
+</div></div>
+
+<!-- history -->
+<div class="modal" id="m-history"><div class="mcard">
+  <div class="mhead"><span data-t="m_history_t"></span><button class="mx" data-close>×</button></div>
+  <div class="mlist" id="hist-list"></div>
+</div></div>
+
+<!-- account delegation (EIP-7702) -->
+<div class="modal" id="m-deleg"><div class="mcard">
+  <div class="mhead"><span data-t="m_deleg_t"></span><button class="mx" data-close>×</button></div>
+  <p class="mnote" data-t="deleg_body"></p>
+  <button class="sbtn" id="btn-deleg-scan" data-t="deleg_scan" style="width:100%"></button>
+  <div class="mlist" id="deleg-list"></div>
+  <div class="mnote" id="deleg-msg"></div>
+</div></div>
+
+<!-- how to use -->
+<div class="modal" id="m-guide"><div class="mcard">
+  <div class="mhead"><span data-t="m_guide_t"></span><button class="mx" data-close>×</button></div>
+  <p class="mnote" data-t="g_intro"></p>
+
+  <div class="gstep"><b data-t="g_s1_t"></b><span data-t="g_s1_b"></span></div>
+  <div class="gstep"><b data-t="g_s2_t"></b><span data-t="g_s2_b"></span></div>
+  <div class="gstep"><b data-t="g_s3_t"></b><span data-t="g_s3_b"></span></div>
+  <div class="gstep"><b data-t="g_s4_t"></b><span data-t="g_s4_b"></span></div>
+
+  <p class="mnote" style="margin-top:16px"><b data-t="g_why_t"></b><br><span data-t="g_why_b"></span></p>
+  <p class="mnote"><b data-t="g_time_t"></b><br><span data-t="g_time_b"></span></p>
+  <p class="mnote"><b data-t="g_stuck_t"></b><br><span data-t="g_stuck_b"></span></p>
+  <p class="mnote" style="color:var(--warn)"><b data-t="g_safe_t"></b><br><span data-t="g_safe_b"></span></p>
+</div></div>
+
+<!-- how it works -->
+<div class="modal" id="m-how"><div class="mcard">
+  <div class="mhead"><span data-t="m_how_t"></span><button class="mx" data-close>×</button></div>
+  <p class="mnote" data-t="how_body"></p>
+  <div class="krow"><span>Arc USDC</span><span class="mono">0x3600…0000</span></div>
+  <div class="krow"><span>TokenMessengerV2 (Arc)</span><span class="mono">0x28b5a0e9…8cf5d</span></div>
+  <div class="krow"><span>MessageTransmitterV2 (Base)</span><span class="mono">0x81D40F21…4B64</span></div>
+  <p class="mnote" style="color:var(--warn)" data-t="how_warn"></p>
+</div></div>
+
+<script>
+"use strict";
+
+/* ============ i18n ============ */
+const I18N={
+ko:{
+  m_guide_t:"사용법", l_guide:"사용법",
+  v_source:"소스 코드",
+  g_first:"처음이신가요? 서명이 여러 번 뜨는 이유와 절차를 먼저 확인하십시오.",
+  g_intro:"Arc에 있는 USDC를 다른 체인으로 빼는 도구입니다. 자금은 항상 본인 지갑에서만 서명되고, 이 사이트는 자금을 보관하지 않습니다.",
+  g_s1_t:"1. 지갑 연결", g_s1_b:"우상단 버튼을 누르고 Arc USDC가 들어 있는 지갑을 고릅니다. Arc 네트워크가 없으면 지갑이 추가할지 물어봅니다.",
+  g_s2_t:"2. 금액과 받는 주소", g_s2_b:"보낼 금액을 넣습니다. 받는 주소는 연결한 지갑이 기본값이고, 다른 곳으로 보내려면 변경을 누릅니다. 주소를 잘못 넣으면 되돌릴 수 없으니 반드시 확인하십시오.",
+  g_s3_t:"3. 서명", g_s3_b:"화면에 표시된 횟수만큼 지갑에서 확인을 누릅니다. 승인 한 번, Arc에서 소각 한 번 이상, 받는 체인에서 수령 한 번입니다.",
+  g_s4_t:"4. 도착 확인", g_s4_b:"소각과 수령이 끝나면 받는 체인 잔고에 들어옵니다. 화면 위쪽에 진행 중인 건이 카드로 표시됩니다.",
+  g_why_t:"서명이 왜 여러 번 뜨나요", g_why_b:"Arc는 한 건당 1 USDC까지만 옮길 수 있게 제한돼 있습니다. 400 USDC를 빼면 400건이 됩니다. 그래서 컨트랙트가 한 번의 서명으로 여러 건을 묶어 처리합니다. 금액칸 아래에 몇 번 서명하는지 미리 표시되며, 안내에 나온 금액을 누르면 서명이 한 번 줄어듭니다.",
+  g_time_t:"얼마나 걸리나요", g_time_b:"보통 10~30분입니다. Circle이 소각을 서명하는 시간이 대부분이고, 그 뒤 수령은 금방 끝납니다.",
+  g_stuck_t:"중간에 끊기면", g_stuck_b:"소각이 끝났다면 자금은 Circle 안에 있고 사라지지 않습니다. 승인은 만료되지 않으니 나중에 하단 복구를 열어 전부 한 번에 수령을 누르면 됩니다. 브라우저를 닫아도 소각 해시가 저장돼 있습니다.",
+  g_safe_t:"확인하십시오", g_safe_b:"이 사이트는 필요한 금액만 승인을 요청합니다. 무제한 승인이나 전체 권한을 요구하는 화면이 뜨면 취소하십시오. 호출하는 컨트랙트 주소는 원리에서 확인할 수 있습니다.",
+  bridge:"브릿지", from:"보내는 체인", to:"받는 체인", bal:"잔고",
+  d_addr:"받는 주소", d_addr_edit:"변경",
+  d_addr_bad:"올바른 주소가 아닙니다 (0x + 40자리).",
+  d_addr_diff:"연결한 지갑이 아닌 다른 주소로 보냅니다. 반드시 본인이 통제하는 주소인지 확인하십시오. 잘못 보내면 되돌릴 수 없습니다.",
+  d_addr_self:"연결한 지갑으로 되돌렸습니다.", d_fee:"수수료", fee_free:"0 · 가스만", fee_exempt:"면제 (운영 지갑)",
+  dep_fee_step:"수수료 전송", src_pick:"보내는 체인 선택", src_proven:"검증됨", src_nofee:"빠른 경로 무료",
+  src_fee:"빠른 경로 수수료 몇 센트",
+  src_note:"Arc로 들어오는 속도는 출발 체인이 아니라 경로에 좌우됩니다. 검증됨 표시는 실제 도착을 측정해 확인한 체인입니다.",
+  dst_pick:"받는 체인 선택", dst_free:"수수료 없음", dst_cheap:"가스 저렴",
+  dst_note:"Arc에서 나가는 것은 어느 체인이든 수수료가 없습니다. 도착 체인에서 수령 트랜잭션 가스만 내므로, 가스가 싼 체인을 고르는 편이 낫습니다.", fee_upto:"최대", fee_net:"Circle 네트워크 수수료",
+  d_route:"경로", route_v:"Circle CCTP v2 (공식 소각·발행)",
+  d_time:"예상 시간", d_split:"분할", tip_opt_a:"", tip_opt_b:"를 보내면 소수점 나머지가 없어져 서명이 한 번 줄어듭니다.", d_status:"브릿지 상태",
+  st_checking:"확인 중", st_open:"지금 사용 가능", st_shut:"지금 이용 불가", st_unknown:"확인 실패",
+  status_open_d:"정상 작동 중", status_shut_d:"Circle 승인이 멈춰서 출금을 막았습니다",
+  status_unknown_d:"네트워크를 못 읽었습니다 (고장이 아니라 확인 실패)",
+  cta_connect:"지갑 연결", cta_amount:"금액을 입력하세요", cta_insuf:"잔고 부족",
+  cta_checking:"상태 확인 중…", cta_shut:"지금은 출금할 수 없습니다",
+  cta_out:"Base로 출금", cta_in:"Arc로 입금", cta_in_confirm:"며칠 걸립니다. 계속하려면 한 번 더", cta_running:"진행 중…",
+  trust:"비보관 · 모든 트랜잭션은 당신 지갑에서 서명 · 자금은 Circle 공식 컨트랙트로만 이동",
+  l_history:"기록", l_recover:"복구", l_how:"원리", l_cashout:"코인 정리", l_deleg:"계정 위임",
+  m_deleg_t:"계정 위임 (EIP-7702) 점검",
+  deleg_body:"지갑을 스마트 계정으로 업그레이드하면 계정이 어떤 컨트랙트에 위임됩니다. 각 체인의 실제 상태를 체인에서 직접 읽습니다. 해제는 지갑 안에서 하고, 여기서 해제됐는지 확인하십시오.",
+  deleg_scan:"체인별 상태 확인",
+  deleg_none:"위임 없음 (일반 지갑)",
+  deleg_yes:"위임됨",
+  deleg_known:"OKX 공식 SmartWalletEntry (감사 공개)",
+  deleg_unknown:"미확인 컨트랙트 — 직접 확인 필요",
+  deleg_nocode:"위임 대상에 코드 없음",
+  deleg_how:"해제 방법. OKX 지갑 홈에서 Smart Account 항목을 열고 Disable을 누르십시오. 체인마다 따로 해제해야 합니다. 해제한 뒤 위 버튼을 다시 눌러 확인하십시오.",
+  deleg_conn:"먼저 지갑을 연결하십시오.",
+  m_cashout_t:"남은 코인 USDC로 정리",
+  co_intro:"Arc에 남은 토큰을 USDC로 바꿔 함께 출금하세요. 같은 이름의 토큰이 여럿일 수 있어 주소 끝 네 자리로 확인하고, 항상 USDC가 가장 많은 풀로 견적합니다.",
+  co_scan:"보유 코인 스캔", co_scanning:"스캔 중…", co_none:"바꿀 토큰이 없습니다.",
+  co_expect:"예상 수령", co_slip:"슬리피지", co_route:"경로", co_sellall:"전부 USDC로 바꾸기",
+  co_sell1:"이 코인만 바꾸기", co_min:"최소 수령",
+  co_slip_low:"낮음", co_slip_mid:"보통", co_slip_high:"높음", co_slip_vhigh:"매우 높음",
+  co_warn_high:"슬리피지가 높습니다. 받는 금액이 크게 줄 수 있습니다.",
+  co_warn_vhigh:"유동성이 얇아 손실이 큽니다. 소액으로 나눠 팔거나 보류를 권합니다.",
+  co_done:"바꿈 완료.", co_selling:"바꾸는 중…", co_noliq:"유동성 없음", co_unstable:"견적이 흔들립니다. 다시 스캔하세요.",
+  co_total:"합계 예상",
+  m_wallet_t:"지갑 선택", w_installed:"브라우저 확장", w_detected:"감지됨", w_openin:"이 앱에서 열기",
+  no_wallet:"지갑을 찾지 못했습니다. OKX·Rabby 등 확장을 켠 뒤 새로고침하세요.",
+  no_wallet_m:"휴대폰 브라우저에는 지갑이 없습니다. 아래에서 쓰시는 지갑을 누르면 그 앱 안에서 이 페이지가 열립니다.",
+  m_account_t:"계정 선택", m_menu_t:"지갑",
+  mm_copy:"주소 복사", mm_copied:"복사됨", mm_switch:"계정 전환", mm_disc:"연결 해제",
+  view_tx:"트랜잭션 보기",
+  m_recover_t:"복구",
+  rec_body:"끊긴 출금을 이어서 마무리합니다. 소각 tx 해시만 있으면 자금은 사라지지 않습니다.",
+  rec_detect:"미수령 소각 자동 탐지", rec_go:"수령", rec_check:"서명만 확인",
+  rec_none:"미수령 소각이 없습니다.", rec_pending:"수령 안 된 소각:", rec_all:"전부 한 번에 수령",
+  rec_manual:"소각 해시를 직접 넣기", rec_conn2:"먼저 지갑을 연결하십시오.",
+  rec_scan1:"소각 기록 검색 중", rec_scan2:"Circle 승인 확인 중", rec_found:"건 발견",
+  rec_busy:"진행 중…", rec_prep:"받을 것 정리 중", rec_sending:"수령 보내는 중",
+  rec_wallet:"지갑에서 확인을 눌러 주십시오", rec_retry:"묶음을 줄여 다시 시도합니다. 크기", rec_pieces:"건", rec_nothing:"받을 것이 없습니다. 이미 전부 수령됐습니다.",
+  rec_norec:"Circle에 이 tx 기록이 아직 없습니다.", rec_attested:"서명 완료",
+  rec_done:"수령 완료.",
+  m_history_t:"기록", h_empty:"아직 기록이 없습니다.",
+  h_out:"출금", h_in:"입금", h_done:"완료", h_unclaimed:"미수령",
+  m_how_t:"원리",
+  how_body:"이 브릿지는 Circle CCTP v2의 공식 소각·발행을 그대로 호출합니다. 보내는 체인에서 USDC를 소각하면 Circle이 서명하고, 받는 체인에서 같은 양이 발행됩니다. 중간 보관자가 없고, 이 사이트는 자금을 만지지 않습니다.",
+  how_warn:"Arc는 정식 출시 전이며 Circle이 예고 없이 서명을 멈출 수 있습니다. 이 페이지는 출금 직전에 실제 최근 소각의 서명 여부를 확인하고, 확인되지 않으면 차단합니다. 큰 금액 전에 반드시 소액으로 먼저 하십시오.",
+  foot:"자금 비보관, 서버 없음. 문제가 생겨도 소각 tx 해시만 있으면 언제든 복구됩니다.",
+  v_title:"이 사이트가 호출하는 계약 (직접 확인하십시오):",
+  sg1:"안전 확인", sg1n:"Circle이 지금 서명 중인지 검사",
+  sg2:"승인", sg2n:"보낼 금액만 승인",
+  sg3:"소각", sg3n:"보내는 체인에서 태우기",
+  sg4:"Circle 서명", sg4n:"보통 15~60초",
+  sg5:"수령", sg5n:"받는 체인에서 발행",
+  din3:"Arc 수령", din3n:"릴레이어가 없으면 직접 제출",
+  run_stop:"중단했습니다.", run_stop_d:"Circle이 지금 서명하고 있지 않습니다. 자금은 그대로입니다.",
+  run_burns:"건 소각 진행. 각 해시는 자동 저장됩니다.",
+  run_delay:"일부 서명이 지연됩니다. 복구에서 마무리하세요: ",
+  run_done:"완료됐습니다.", run_arrived:"건 도착.",
+  run_hash:"소각 전송됨. 해시: ",
+  run_wait_relay:"서명 완료. 릴레이어가 대신 제출하는지 60초 기다립니다…",
+  run_relayed:"릴레이어가 대신 제출했습니다.", run_self:"직접 제출 중…",
+  run_dep_done:"입금 완료.",
+  dep_waiting:"Circle 승인을 기다리는 중입니다.",
+  dep_wait_note:"Base에서 보낼 때는 보통 15분 정도 걸립니다. 창을 닫아도 자금은 안전하며, 나중에 복구에서 마무리할 수 있습니다.",
+  dep_slow_t:"아직 승인이 안 났습니다. 자금은 안전합니다.",
+  dep_relay_t:"승인은 끝났고, 도착만 남았습니다.",
+  dep_relay_b:"Circle 서명이 완료돼 자금은 이미 당신 몫으로 확정됐습니다. 마지막 제출은 릴레이어가 대신 하는데 아직 오지 않았습니다. Arc 가스가 없어 직접 제출은 불가능하니, 잠시 뒤 이 페이지를 다시 열면 상단에 받기 버튼이 나타납니다.",
+  dep_slow_b:"Circle 승인이 늦어지고 있을 뿐입니다. 아래 해시를 복구 화면에 넣으면 언제든 받을 수 있습니다.",
+  dep_fee_note:"Circle 네트워크 수수료 상한을 적용합니다. 실제 청구는 보통 0.02 USDC 안팎입니다. 상한",dep_ok_t:"입금 성공", dep_ok_b:"가 Arc에 도착했습니다.",
+  fl_ready:"받을 준비가 됐습니다", fl_auto:"진행 중인 출금이 이 건을 자동으로 받아옵니다. 그대로 두십시오.", fl_wait:"보내는 중",
+  fl_note:"Circle 승인을 기다리는 중입니다.", fl_slow:"평소보다 오래 걸리고 있지만 자금은 안전합니다.",
+  fl_stuck:"많이 지연되고 있습니다. 소각은 이미 끝났고 자금은 Circle 시스템 안에 있어 사라지지 않습니다. 승인이 나면 이 자리에 받기 버튼이 생깁니다. 아래 해시를 보관하십시오.",
+  ex_ok_t:"출금 성공", ex_ok_b:"가 Base에 도착했습니다.",
+  err_rejected:"지갑에서 취소했습니다. 자금은 그대로입니다.",
+  err_gas:"가스가 부족합니다. 잔고를 확인하세요.",
+  err_chain:"네트워크 전환이 필요합니다. 지갑에서 승인해 주세요.",
+  err_nonce:"지갑의 거래 순번이 어긋났습니다. 지갑을 새로고침하거나 잠시 후 다시 시도하세요.",
+  err_net:"네트워크 응답이 없습니다. 자금은 안전하며, 잠시 후 다시 시도하세요.",
+  err_revert:"거래가 되돌려졌습니다. 조건이 맞지 않아 아무것도 실행되지 않았습니다.",
+  failed_t:"실패했습니다.",
+  hint_out:"건당 1 USDC 한도 때문에 금액만큼 자동 분할 서명합니다. 소액으로 먼저 해보세요.",
+  hint_out_b:"건당 1 USDC 한도는 배치 컨트랙트가 한 번의 서명으로 묶어 처리합니다. 서비스 수수료는 위 금액에 포함되어 있습니다. 소액으로 먼저 해보세요.",
+  hint_in:"Arc 가스가 없어도 됩니다. 도착은 Circle 릴레이어가 처리하며, 가동 중이면 몇 분, 아니면 다음 가동까지 몇 시간 걸릴 수 있습니다. 자금은 그동안 Circle에 안전하게 보관됩니다. 수수료 3%는 위 금액에 포함.",
+  dep_warn_t:"입금은 며칠 걸립니다. 급하면 쓰지 마십시오.",
+  dep_warn_b:"실측입니다. 7월 30일 보낸 건이 8월 10일에, 8월 1일 보낸 건이 같은 날 도착했습니다(각각 11.6일, 9.6일). Circle이 이 방향을 밀린 채 두었다가 한꺼번에 처리합니다. 자금은 사라지지 않고 언제든 받을 수 있지만 도착은 Circle이 정합니다. 반대 방향(Arc에서 나가기)은 몇 분이면 됩니다.",
+  sig_about:"서명 약", sig_times:"회", min:"분", hour:"시간", time_about:"약", time_dep:"몇 분~수 시간",
+  over_cap:"건당 한도 초과: ",
+  copied:"복사됨"
+},
+en:{
+  m_guide_t:"How to use", l_guide:"How to use",
+  v_source:"Source code",
+  g_first:"First time here? See why several signatures appear, and what the steps are.",
+  g_intro:"A tool for moving USDC out of Arc to another chain. Every transaction is signed in your own wallet; this site never holds your funds.",
+  g_s1_t:"1. Connect a wallet", g_s1_b:"Press the button top right and pick the wallet holding your Arc USDC. If Arc is not in your wallet yet, it will offer to add it.",
+  g_s2_t:"2. Amount and recipient", g_s2_b:"Enter the amount to send. The recipient defaults to the connected wallet; press Change to send elsewhere. A wrong address cannot be undone, so check it.",
+  g_s3_t:"3. Sign", g_s3_b:"Confirm in your wallet as many times as the screen says: one approval, one or more burns on Arc, and one collection on the destination.",
+  g_s4_t:"4. Arrival", g_s4_b:"Once burn and collection finish, the funds appear in your destination balance. Anything in flight is shown as a card at the top.",
+  g_why_t:"Why several signatures", g_why_b:"Arc caps a single transfer at 1 USDC, so withdrawing 400 USDC means 400 pieces. A contract folds many of them into one signature. The count is shown under the amount, and pressing the suggested amount saves one signature.",
+  g_time_t:"How long", g_time_b:"Usually 10 to 30 minutes. Most of that is Circle signing the burn; collection is quick.",
+  g_stuck_t:"If it is interrupted", g_stuck_b:"Once burned, the funds sit inside Circle and cannot vanish. Attestations do not expire, so open Recover at the bottom later and press Claim all at once. The burn hashes are saved even if you close the browser.",
+  g_safe_t:"Check this", g_safe_b:"This site only ever requests approval for the exact amount. If any screen asks for an unlimited allowance or blanket permission, cancel it. The contracts it calls are listed under How it works.",
+  bridge:"Bridge", from:"From", to:"To", bal:"Balance",
+  d_addr:"Recipient", d_addr_edit:"change",
+  d_addr_bad:"Not a valid address (0x + 40 hex).",
+  d_addr_diff:"Sending to an address other than the connected wallet. Make sure you control it; a wrong address cannot be undone.",
+  d_addr_self:"Reset to the connected wallet.", d_fee:"Fee", fee_free:"0 · gas only", fee_exempt:"exempt (operator wallet)",
+  dep_fee_step:"sending fee", src_pick:"Choose source chain", src_proven:"measured", src_nofee:"fast lane free",
+  src_fee:"fast lane costs a few cents",
+  src_note:"Speed into Arc depends on the lane, not the chain. Chains marked measured are ones whose arrivals were timed.",
+  dst_pick:"Choose destination", dst_free:"no fee", dst_cheap:"cheap gas",
+  dst_note:"Leaving Arc is free to every chain. You only pay gas for the claim on the destination, so a cheap-gas chain is the better pick.", fee_upto:"up to", fee_net:"Circle network fee",
+  d_route:"Route", route_v:"Circle CCTP v2 (official burn & mint)",
+  d_time:"Est. time", d_split:"Split", tip_opt_a:"Sending ", tip_opt_b:" instead leaves no fractional piece, saving one signature.", d_status:"Bridge status",
+  st_checking:"checking", st_open:"Working now", st_shut:"Unavailable now", st_unknown:"can't check",
+  status_open_d:"Operating normally", status_shut_d:"Circle stopped approving, so withdrawals are blocked",
+  status_unknown_d:"Could not read the network (a failed check, not an outage)",
+  cta_connect:"Connect wallet", cta_amount:"Enter an amount", cta_insuf:"Insufficient balance",
+  cta_checking:"Checking status…", cta_shut:"Withdrawals unavailable now",
+  cta_out:"Withdraw to Base", cta_in:"Deposit to Arc", cta_in_confirm:"This takes days. Press again to continue", cta_running:"Working…",
+  trust:"Non-custodial · every transaction is signed in your wallet · funds move only through Circle's official contracts",
+  l_history:"History", l_recover:"Recover", l_how:"How it works", l_cashout:"Cash out tokens", l_deleg:"Account delegation",
+  m_deleg_t:"Account delegation (EIP-7702)",
+  deleg_body:"Upgrading a wallet to a smart account delegates it to a contract. This reads the real state from each chain. Revoke inside your wallet, then come back here to confirm it took effect.",
+  deleg_scan:"Check every chain",
+  deleg_none:"Not delegated (plain wallet)",
+  deleg_yes:"Delegated",
+  deleg_known:"OKX official SmartWalletEntry (audits published)",
+  deleg_unknown:"Unrecognised contract — verify it yourself",
+  deleg_nocode:"Delegate address holds no code",
+  deleg_how:"To revoke: open Smart Account in the OKX wallet home and choose Disable. It is per chain. Then press the button above again to confirm.",
+  deleg_conn:"Connect a wallet first.",
+  m_cashout_t:"Cash out leftover tokens",
+  co_intro:"Swap tokens stranded on Arc into USDC so they can leave with you. Same-name tokens exist - check the last four address characters. Quotes always use the deepest USDC pool.",
+  co_scan:"Scan holdings", co_scanning:"Scanning…", co_none:"Nothing to swap.",
+  co_expect:"Est. receive", co_slip:"Slippage", co_route:"Route", co_sellall:"Swap everything to USDC",
+  co_sell1:"Swap this token", co_min:"Min. received",
+  co_slip_low:"low", co_slip_mid:"moderate", co_slip_high:"high", co_slip_vhigh:"very high",
+  co_warn_high:"High slippage - you may receive noticeably less.",
+  co_warn_vhigh:"Very thin liquidity. Consider selling in parts or holding.",
+  co_done:"Swapped.", co_selling:"Swapping…", co_noliq:"No liquidity", co_unstable:"Quote unstable. Re-scan.",
+  co_total:"Estimated total",
+  m_wallet_t:"Choose a wallet", w_installed:"Browser extension", w_detected:"Detected", w_openin:"Open in this app",
+  no_wallet:"No wallet found. Enable an extension (OKX, Rabby…) and reload.",
+  no_wallet_m:"Phone browsers have no wallet extension. Tap your wallet below to open this page inside its own browser.",
+  view_tx:"View transaction",
+  m_account_t:"Choose an account", m_menu_t:"Wallet",
+  mm_copy:"Copy address", mm_copied:"Copied", mm_switch:"Switch account", mm_disc:"Disconnect",
+  m_recover_t:"Recover",
+  rec_body:"Finish an interrupted withdrawal. With the burn tx hash, funds are never lost.",
+  rec_detect:"Detect unredeemed burns", rec_go:"Redeem", rec_check:"Check only",
+  rec_none:"No pending burns.", rec_pending:"Unredeemed burns:", rec_all:"Claim all at once",
+  rec_manual:"Enter a burn hash yourself", rec_conn2:"Connect a wallet first.",
+  rec_scan1:"Searching burns", rec_scan2:"Checking Circle attestations", rec_found:"found",
+  rec_busy:"Working…", rec_prep:"Gathering what is claimable", rec_sending:"Submitting claims",
+  rec_wallet:"Confirm in your wallet", rec_retry:"Retrying with a smaller batch, size", rec_pieces:" pieces", rec_nothing:"Nothing to claim. All of it is already collected.",
+  rec_norec:"Circle has no record of this tx yet.", rec_attested:"attested",
+  rec_done:"Redeemed.",
+  m_history_t:"History", h_empty:"Nothing yet.",
+  h_out:"Out", h_in:"In", h_done:"done", h_unclaimed:"unclaimed",
+  m_how_t:"How it works",
+  how_body:"This bridge calls Circle CCTP v2's official burn-and-mint directly. USDC is burned on the source chain, Circle attests, and the same amount is minted on the destination. There is no custodian and this site never touches funds.",
+  how_warn:"Arc is pre-launch and Circle can stop attesting without notice. This page verifies a real recent burn is being attested right before you withdraw, and blocks if not. Always try a small amount first.",
+  foot:"Non-custodial, no server. If anything breaks, keep the burn tx hash and it stays recoverable.",
+  v_title:"Contracts this site can call, verify them yourself:",
+  sg1:"Safety check", sg1n:"verify Circle is attesting now",
+  sg2:"Approve", sg2n:"only the amount you send",
+  sg3:"Burn", sg3n:"on the source chain",
+  sg4:"Circle attestation", sg4n:"usually 15–60s",
+  sg5:"Receive", sg5n:"mint on the destination",
+  din3:"Receive on Arc", din3n:"self-submit if no relayer",
+  run_stop:"Stopped.", run_stop_d:"Circle is not attesting right now. Funds untouched.",
+  run_burns:" burns in progress. Every hash is saved.",
+  run_delay:"Some attestations are delayed. Finish in Recover: ",
+  run_done:"Done.", run_arrived:" arrived.",
+  run_hash:"Burn sent. Hash: ",
+  run_wait_relay:"Attested. Waiting 60s for a relayer…",
+  run_relayed:"A relayer submitted it for you.", run_self:"Submitting yourself…",
+  run_dep_done:"Deposited.",
+  dep_waiting:"Waiting for Circle to approve.",
+  dep_wait_note:"From Base this usually takes about 15 minutes. You can close this window; the funds are safe and can be finished later in Recover.",
+  dep_slow_t:"Not approved yet. Your funds are safe.",
+  dep_relay_t:"Approved. Only the arrival is left.",
+  dep_relay_b:"Circle has signed, so the funds are already yours. The final submission is normally made by a relayer, which has not shown up yet. You have no Arc gas to submit it yourself, so reopen this page shortly and a claim button will be waiting at the top.",
+  dep_slow_b:"Circle is just slow right now. Paste the hash below into Recover to claim it any time.",
+  dep_fee_note:"Applying a Circle network fee ceiling. The real charge is usually around 0.02 USDC. Ceiling",dep_ok_t:"Deposit complete", dep_ok_b:"arrived on Arc.",
+  fl_ready:"ready to claim", fl_auto:"The withdrawal in progress is collecting this one. Leave it be.", fl_wait:"in transit",
+  fl_note:"Waiting for Circle to approve.", fl_slow:"Taking longer than usual, but your funds are safe.",
+  fl_stuck:"Badly delayed. The burn already completed and the funds sit inside Circle, so they cannot vanish. A claim button appears here once it is approved. Keep the hash below.",
+  ex_ok_t:"Withdrawal complete", ex_ok_b:"arrived on Base.",
+  err_rejected:"You cancelled in your wallet. Nothing moved.",
+  err_gas:"Not enough gas. Check your balance.",
+  err_chain:"A network switch is needed. Approve it in your wallet.",
+  err_nonce:"Your wallet transaction order is out of sync. Refresh the wallet or retry shortly.",
+  err_net:"The network did not answer. Your funds are safe; try again shortly.",
+  err_revert:"The transaction was reverted, so nothing executed.",
+  failed_t:"Failed.",
+  hint_out:"The 1 USDC per-message cap splits your amount into that many signatures. Try small first.",
+  hint_out_b:"The batch contract packs the 1-USDC-per-message cap into a single signature. The service fee is already included in the amount above. Try small first.",
+  hint_in:"No Arc gas needed. Delivery is done by Circle's relayer: minutes while it is running, up to hours until its next run. Funds stay safe inside Circle meanwhile. The 3% fee is included above.",
+  dep_warn_t:"Deposits take days. Do not use this if you are in a hurry.",
+  dep_warn_b:"Measured, not guessed: a transfer sent on 30 July arrived on 10 August, and one sent on 1 August arrived the same day (11.6 and 9.6 days). Circle leaves this direction queued and clears it in batches. Funds are never lost and stay claimable, but the arrival is on Circle's schedule. The other direction, leaving Arc, takes minutes.",
+  sig_about:"≈", sig_times:" signatures", min:" min", hour:" h", time_about:"~", time_dep:"minutes to hours",
+  over_cap:"over the per-message cap: ",
+  copied:"Copied"
+},
+zh:{
+  m_guide_t:"使用方法", l_guide:"使用方法",
+  v_source:"源代码",
+  g_first:"第一次使用？请先了解为什么会多次签名以及具体步骤。",
+  g_intro:"用于把 Arc 上的 USDC 转出到其他链。所有交易都在你自己的钱包中签名，本站不保管任何资金。",
+  g_s1_t:"1. 连接钱包", g_s1_b:"点击右上角按钮，选择持有 Arc USDC 的钱包。若钱包中没有 Arc 网络，会提示添加。",
+  g_s2_t:"2. 金额与接收地址", g_s2_b:"输入要转出的金额。接收地址默认为已连接的钱包，如需转到别处请点击更改。地址填错无法撤回，请务必核对。",
+  g_s3_t:"3. 签名", g_s3_b:"按屏幕提示的次数在钱包中确认：一次授权、一次或多次 Arc 销毁、以及目标链上一次领取。",
+  g_s4_t:"4. 确认到账", g_s4_b:"销毁与领取完成后，资金会出现在目标链余额中。进行中的转账会显示在页面上方。",
+  g_why_t:"为什么要签名多次", g_why_b:"Arc 限制每笔最多 1 USDC，因此转出 400 USDC 就是 400 笔。合约会把多笔合并为一次签名。金额下方会预先显示签名次数，点击提示中的金额可少签一次。",
+  g_time_t:"需要多久", g_time_b:"通常 10 到 30 分钟。大部分时间用于 Circle 对销毁签名，领取很快。",
+  g_stuck_t:"中途中断了", g_stuck_b:"只要已销毁，资金就在 Circle 系统内不会消失。签名不会过期，稍后打开底部的恢复并点击一次性全部领取即可。即使关闭浏览器，销毁哈希也已保存。",
+  g_safe_t:"请注意", g_safe_b:"本站只会请求所需金额的授权。若出现要求无限授权或全部权限的界面，请取消。可在原理中查看本站调用的合约地址。",
+  bridge:"跨链桥", from:"来源链", to:"目标链", bal:"余额",
+  d_addr:"接收地址", d_addr_edit:"更改",
+  d_addr_bad:"地址无效（0x + 40 位）。",
+  d_addr_diff:"将发送到非当前连接钱包的地址。请确认该地址由你掌控，转错无法撤回。",
+  d_addr_self:"已恢复为连接的钱包。", d_fee:"手续费", fee_free:"0 · 仅 gas", fee_exempt:"免除（运营钱包）",
+  dep_fee_step:"发送手续费", src_pick:"选择来源链", src_proven:"已实测", src_nofee:"快速通道免费",
+  src_fee:"快速通道仅几分钱",
+  src_note:"到 Arc 的速度取决于通道而非来源链。标注已实测的链是经过到账计时验证的。",
+  dst_pick:"选择接收链", dst_free:"无手续费", dst_cheap:"gas 便宜",
+  dst_note:"从 Arc 转出到任何链都免手续费。你只需支付目标链的领取 gas，因此选 gas 便宜的链更划算。", fee_upto:"最多", fee_net:"Circle 网络费",
+  d_route:"路径", route_v:"Circle CCTP v2（官方销毁·铸造）",
+  d_time:"预计时间", d_split:"拆分", tip_opt_a:"改为发送 ", tip_opt_b:" 可消除小数余额，少签名一次。", d_status:"桥接状态",
+  st_checking:"检查中", st_open:"现在可用", st_shut:"当前不可用", st_unknown:"无法确认",
+  status_open_d:"运行正常", status_shut_d:"Circle 暂停签名，已阻止提现",
+  status_unknown_d:"无法读取链（未知，而非关闭）",
+  cta_connect:"连接钱包", cta_amount:"请输入金额", cta_insuf:"余额不足",
+  cta_checking:"正在检查状态…", cta_shut:"当前无法提现",
+  cta_out:"提现到 Base", cta_in:"充值到 Arc", cta_in_confirm:"需要数天，再按一次继续", cta_running:"进行中…",
+  trust:"非托管 · 所有交易均在您的钱包中签名 · 资金仅经过 Circle 官方合约",
+  l_history:"记录", l_recover:"恢复", l_how:"原理", l_cashout:"清仓代币", l_deleg:"账户委托",
+  m_deleg_t:"账户委托 (EIP-7702) 检查",
+  deleg_body:"将钱包升级为智能账户会把账户委托给某个合约。此处直接从各链读取真实状态。请在钱包内解除委托，然后回到这里确认。",
+  deleg_scan:"逐链检查",
+  deleg_none:"未委托（普通钱包）",
+  deleg_yes:"已委托",
+  deleg_known:"OKX 官方 SmartWalletEntry（已公开审计）",
+  deleg_unknown:"未识别合约，需自行核实",
+  deleg_nocode:"委托地址没有代码",
+  deleg_how:"解除方法。在 OKX 钱包首页打开 Smart Account 并选择 Disable，需逐链解除。完成后再次点击上方按钮确认。",
+  deleg_conn:"请先连接钱包。",
+  m_cashout_t:"把剩余代币换成 USDC",
+  co_intro:"将滞留在 Arc 上的代币换成 USDC 一起提走。同名代币可能有多个，请核对地址末四位。报价始终使用 USDC 最深的池子。",
+  co_scan:"扫描持仓", co_scanning:"扫描中…", co_none:"没有可换的代币。",
+  co_expect:"预计到账", co_slip:"滑点", co_route:"路径", co_sellall:"全部换成 USDC",
+  co_sell1:"只换这个代币", co_min:"最少到账",
+  co_slip_low:"低", co_slip_mid:"中等", co_slip_high:"高", co_slip_vhigh:"极高",
+  co_warn_high:"滑点较高，到账可能明显减少。",
+  co_warn_vhigh:"流动性极薄，损失较大。建议分批卖或暂持。",
+  co_done:"已完成。", co_selling:"兑换中…", co_noliq:"无流动性", co_unstable:"报价不稳定，请重新扫描。",
+  co_total:"预计合计",
+  m_wallet_t:"选择钱包", w_installed:"浏览器扩展", w_detected:"已检测", w_openin:"在该应用中打开",
+  no_wallet:"未找到钱包。请启用 OKX、Rabby 等扩展后刷新。",
+  no_wallet_m:"手机浏览器没有钱包扩展。点击下方钱包，即可在其内置浏览器中打开本页。",
+  view_tx:"查看交易",
+  m_account_t:"选择账户", m_menu_t:"钱包",
+  mm_copy:"复制地址", mm_copied:"已复制", mm_switch:"切换账户", mm_disc:"断开连接",
+  m_recover_t:"恢复",
+  rec_body:"继续完成中断的提现。只要有销毁交易哈希，资金就不会丢失。",
+  rec_detect:"自动检测未领取的销毁", rec_go:"领取", rec_check:"仅检查",
+  rec_none:"没有待领取的销毁。", rec_pending:"未领取的销毁：", rec_all:"一次性全部领取",
+  rec_manual:"手动输入销毁哈希", rec_conn2:"请先连接钱包。",
+  rec_scan1:"正在搜索销毁记录", rec_scan2:"正在确认 Circle 签名", rec_found:"笔",
+  rec_busy:"处理中…", rec_prep:"正在整理可领取的部分", rec_sending:"正在提交领取",
+  rec_wallet:"请在钱包中确认", rec_retry:"改用更小的批次重试，大小", rec_pieces:"笔", rec_nothing:"没有可领取的部分，已全部领取完毕。",
+  rec_norec:"Circle 暂无此交易记录。", rec_attested:"已签名",
+  rec_done:"领取完成。",
+  m_history_t:"记录", h_empty:"暂无记录。",
+  h_out:"提现", h_in:"充值", h_done:"完成", h_unclaimed:"未领取",
+  m_how_t:"原理",
+  how_body:"本桥直接调用 Circle CCTP v2 的官方销毁·铸造。来源链销毁 USDC，Circle 签名后在目标链铸造等额。没有托管方，本站不接触资金。",
+  how_warn:"Arc 尚未正式上线，Circle 可能随时停止签名。本页在提现前会验证最近的真实销毁是否正在被签名，未确认则阻止。请务必先用小额测试。",
+  foot:"非托管，无服务器。若出现问题，只要保存销毁交易哈希，随时可恢复。",
+  v_title:"本站调用的合约，可自行核验：",
+  sg1:"安全检查", sg1n:"验证 Circle 当前是否在签名",
+  sg2:"授权", sg2n:"仅授权发送金额",
+  sg3:"销毁", sg3n:"在来源链销毁",
+  sg4:"Circle 签名", sg4n:"通常 15–60 秒",
+  sg5:"接收", sg5n:"在目标链铸造",
+  din3:"Arc 接收", din3n:"无中继者则自行提交",
+  run_stop:"已中止。", run_stop_d:"Circle 当前未签名。资金原封不动。",
+  run_burns:" 笔销毁进行中。每笔哈希已自动保存。",
+  run_delay:"部分签名延迟。请在恢复中完成：",
+  run_done:"完成。", run_arrived:" 笔已到账。",
+  run_hash:"销毁已发送。哈希：",
+  run_wait_relay:"已签名。等待中继者提交 60 秒…",
+  run_relayed:"中继者已代为提交。", run_self:"正在自行提交…",
+  run_dep_done:"充值完成。",
+  dep_waiting:"正在等待 Circle 签名批准。",
+  dep_wait_note:"从 Base 出发通常约需 15 分钟。可以关闭此窗口，资金安全，稍后可在恢复页面完成。",
+  dep_slow_t:"尚未获批，资金安全。",
+  dep_relay_t:"已获批，只差到账。",
+  dep_relay_b:"Circle 已签名，资金已归属于你。最后一步通常由中继者提交，但目前尚未出现。你没有 Arc gas 无法自行提交，请稍后重新打开本页，顶部会出现领取按钮。",
+  dep_slow_b:"只是 Circle 签名较慢。把下方哈希填入恢复页面，随时可以领取。",
+  dep_fee_note:"应用 Circle 网络费上限。实际扣费通常约 0.02 USDC。上限",dep_ok_t:"充值成功", dep_ok_b:"已到达 Arc。",
+  fl_ready:"可以领取了", fl_auto:"正在进行的提现会自动领取这一笔，请勿重复操作。", fl_wait:"转移中",
+  fl_note:"正在等待 Circle 批准。", fl_slow:"比平常久一些，但资金安全。",
+  fl_stuck:"延迟较久。销毁已完成，资金留在 Circle 系统中不会消失。获批后此处会出现领取按钮。请保存下方哈希。",
+  ex_ok_t:"提现成功", ex_ok_b:"已到达 Base。",
+  err_rejected:"你在钱包中取消了，资金未变动。",
+  err_gas:"gas 不足，请检查余额。",
+  err_chain:"需要切换网络，请在钱包中确认。",
+  err_nonce:"钱包交易序号不同步，请刷新钱包或稍后重试。",
+  err_net:"网络无响应。资金安全，请稍后重试。",
+  err_revert:"交易已回滚，未执行任何操作。",
+  failed_t:"失败。",
+  hint_out:"因每笔 1 USDC 上限，金额将自动拆分为等量签名。请先小额测试。",
+  hint_out_b:"批量合约将 1 USDC 上限打包为一次签名。服务费已包含在上方金额中。请先小额测试。",
+  hint_in:"无需 Arc gas。到账由 Circle 中继器处理：运行时几分钟，否则需等待下次运行（数小时）。期间资金安全保存在 Circle。3% 手续费已含。",
+  dep_warn_t:"充值需要数天，赶时间请勿使用。",
+  dep_warn_b:"实测数据：7 月 30 日发出的于 8 月 10 日到账，8 月 1 日发出的也在同日到账（分别为 11.6 天与 9.6 天）。Circle 会将该方向积压后批量处理。资金不会丢失且随时可领取，但到账时间由 Circle 决定。反方向（从 Arc 转出）只需几分钟。",
+  sig_about:"约", sig_times:"次签名", min:"分钟", hour:"小时", time_about:"约", time_dep:"数分钟至数小时",
+  over_cap:"超过单笔上限：",
+  copied:"已复制"
+}};
+let LANG=localStorage.getItem("arcExitLang")||"ko";
+/* An empty string is a legitimate translation (some sentences read better with
+   nothing before the inserted value), but `||` treats it as missing and falls
+   through to printing the key name on screen. Test for presence, not truth. */
+const t=k=>{
+  const cur=I18N[LANG];
+  if(cur&&cur[k]!==undefined) return cur[k];
+  return I18N.ko[k]!==undefined?I18N.ko[k]:k;
+};
+function applyLang(){
+  document.querySelectorAll("[data-t]").forEach(el=>{ el.textContent=t(el.getAttribute("data-t")); });
+  document.querySelectorAll(".lang button").forEach(b=>
+    b.classList.toggle("on",b.getAttribute("data-lang")===LANG));
+  renderChips(); renderStatus(); renderDetails(); updateCTA(); renderWalletBtn();
+}
+
+/* ============ constants ============ */
+const ARC_CHAIN_ID=5042, ARC_HEX="0x13b2", BASE_CHAIN_ID=8453, BASE_HEX="0x2105";
+const ARC_DOMAIN=26, BASE_DOMAIN=6;
+const ARC_USDC="0x3600000000000000000000000000000000000000";
+const BASE_USDC="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+const TOKEN_MESSENGER="0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d";
+const TOKEN_MINTER="0xfd78EE919681417d192449715b2594ab58f5D002";
+const TRANSMITTER="0x81D40F21F12A8F0E3252Bccb954D722d4c464B64"; // same addr on Arc & Base
+const IRIS="https://iris-api.circle.com/v2";
+/* Arc has no official public RPC. sharc.fun is the only community proxy that
+   still answers a browser: unstabletrade began returning 403, then dropped its
+   CORS header entirely, so from a page it is not merely slow but unreachable -
+   and left in the list it made every call fail a preflight first and flood the
+   console. One working endpoint with a timeout beats two where one is a wall. */
+const ARC_RPCS=["https://sharc.fun/rpc"];
+const BASE_RPCS=["https://mainnet.base.org","https://base.llamarpc.com","https://base-rpc.publicnode.com"];
+
+/* Every CCTP chain can reach Arc, and the one that demonstrably arrives fast
+   is Arbitrum: eleven of eleven timed arrivals landed within minutes, while
+   the only Base-sourced ones measured took 9.6 and 11.6 days. Rather than
+   pinning users to Base, let them pick a source. `fastFee` is Circle's own
+   published price for the fast lane into Arc; zero means the fast lane costs
+   nothing from that chain. */
+const SOURCES=[
+  {key:"base", name:"Base", chainId:8453, hex:"0x2105", domain:6, fastFee:0.325,
+   usdc:"0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", proven:false,
+   rpcs:["https://mainnet.base.org","https://base.llamarpc.com","https://base-rpc.publicnode.com"]},
+  {key:"arb", name:"Arbitrum", chainId:42161, hex:"0xa4b1", domain:3, fastFee:0.35,
+   usdc:"0xaf88d065e77c8cC2239327C5EDb3A432268e5831", proven:true,
+   rpcs:["https://arb1.arbitrum.io/rpc","https://arbitrum-one-rpc.publicnode.com"]},
+  {key:"avax", name:"Avalanche", chainId:43114, hex:"0xa86a", domain:1, fastFee:0,
+   usdc:"0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E", proven:false,
+   rpcs:["https://api.avax.network/ext/bc/C/rpc"]},
+  {key:"pol", name:"Polygon", chainId:137, hex:"0x89", domain:7, fastFee:0,
+   usdc:"0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", proven:false,
+   rpcs:["https://polygon-rpc.com","https://polygon-bor-rpc.publicnode.com"]},
+  {key:"eth", name:"Ethereum", chainId:1, hex:"0x1", domain:0, fastFee:0.25,
+   usdc:"0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", proven:false,
+   rpcs:["https://eth.llamarpc.com","https://ethereum-rpc.publicnode.com"]},
+];
+SOURCES.forEach(s=>{ s.gas = (s.key==="eth") ? "high" : "low"; });
+let SRC=SOURCES.find(s=>s.proven)||SOURCES[0];
+let DST=SOURCES[0];          // withdrawal destination; Arc->any is free
+function dstByKey(k){ return SOURCES.find(s=>s.key===k)||SOURCES[0]; }
+function srcByKey(k){ return SOURCES.find(s=>s.key===k)||SOURCES[0]; }
+// Set after deploying the batch contract; empty = one burn per message, fee 0.
+const BATCH_CONTRACT="0x83839c096c71f3af1732a3685adc1c33db8f661d";
+// Deposits are OFF. Live 0.1 tests proved raw CCTP burns are not picked up by
+// Circle's relayer (it serves app-mediated transfers only) and wait for a
+// multi-day sweep. Until we have a rail that demonstrably delivers within the
+// promised time, this direction is not sellable.
+const DEPOSITS_ENABLED=/[?&]indev/.test(location.search);
+/* Operator path. The batch contract is what normally enforces the exemption,
+   but it is not deployed yet, so a locally served copy moves the operator's own
+   funds at cost. Gated on the hostname, so the live site is unaffected and this
+   is not a way for anyone to dodge the fee.
+
+   This used to require ?nofee, which was a mistake: a reload or a retyped
+   address drops the query string, the page silently goes back to charging, and
+   the operator pays a fee to their own wallet without noticing. It did exactly
+   that twice. Local is now free by default; ?fee is there to exercise the
+   charging path when testing it is the point. */
+const LOCAL_HOST=/^(localhost|127\.0\.0\.1|\[::1\]|)$/.test(location.hostname);
+const NOFEE=LOCAL_HOST&&!/[?&]fee\b/.test(location.search);
+const TOPIC_DEPOSIT_BURN="0x0c8c1cbdc5190613ebd485511d4e2812cfa45eecb79d845893331fedad5130a5";
+const SEL={transfer:"0xa9059cbb",approve:"0x095ea7b3",allowance:"0xdd62ed3e",balanceOf:"0x70a08231",
+  depositForBurn:"0x8e0250ee",
+  // depositForBurnWithHook(uint256,uint32,bytes32,address,bytes32,uint256,uint32,bytes)
+  depositForBurnWithHook:"0x779b432d",receiveMessage:"0x57ecfd28",burnLimit:"0xa56ec632",
+  // batchExit(uint256,uint256,uint32,bytes32,uint256,uint32,uint16)
+  batchExit:"0xbeb71d32",
+  feeBps:"0x24a9d853",      // feeBps() - read live, never assumed
+  feeExempt:"0x398daa85",   // feeExempt(address) - operator wallets pay nothing
+  usedNonces:"0xfeb61724",  // usedNonces(bytes32) - 1 means already minted
+  decimals:"0x313ce567",symbol:"0x95d89b41",getPair:"0xe6a43905",getPool:"0x1698ee82",
+  swapExactInput:"0xe993f276",swapExactTokensForTokens:"0x38ed1739"};
+// Arc DEX plumbing for the cash-out card (same venues the operator page uses;
+// the quote always picks whichever pool actually holds the most USDC).
+const V2_FACTORY="0x942bd5bfdc5317c5507e326f8eb4bb6058ab5c10";
+const V3_FACTORY="0xf0db7b58379503491d857db50ac9ece64c653918";
+const SWAP_HELPER="0x2804d131cfb046f987e7e532bc58cfc30326b350";
+const V3_ROUTER="0x53bf6b0684ec7ef91e1387da3d1a1769bc5a6f77";
+const V2_ROUTER="0x33c2bfa0684342b210b62ca7e92abe3fecb0bfa3";
+const V3_APPROVE_SPENDER="0x53dea4f7783c1de84cecc5c989bc37a557154827";
+const FEE_TIERS=[100,500,3000,10000];
+const TRANSFER_TOPIC="0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+
+/* ============ helpers ============ */
+const $=id=>document.getElementById(id);
+const strip=h=>h.replace(/^0x/,"");
+const pad32=v=>strip(v).toLowerCase().padStart(64,"0");
+const hexNum=n=>"0x"+BigInt(n).toString(16);
+const numHex=h=>(h&&h!=="0x")?BigInt(h):0n;
+function usdc(u){ return (Number(u)/1e6).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:6}); }
+function parseUsdc(s){ if(!/^\d*\.?\d*$/.test(s||"")||!s||s===".") return null;
+  const [a,b=""]=s.split("."); return BigInt(a||"0")*1000000n+BigInt((b+"000000").slice(0,6)); }
+function short(a){ return a?a.slice(0,6)+"…"+a.slice(-4):""; }
+
+/* Failover with memory. Arc has exactly two community RPCs and no official
+   public one; while this was being built the primary started answering 403 and
+   the other dropped the occasional call. Walking the list in fixed order made
+   every request pay the dead endpoint's failure first. So remember, per list,
+   which endpoint answered last, and start there next time. A ?" in d" check is
+   not enough either: a proxy that errors still returns JSON, so an explicit
+   error object counts as a miss and moves on. */
+const RPC_GOOD=new Map();
+async function rpcVia(urls,method,params){
+  let last=null;
+  const key=urls.join("|");
+  const fav=RPC_GOOD.get(key);
+  const order=fav&&urls.includes(fav)?[fav,...urls.filter(u=>u!==fav)]:urls;
+  // Two passes with a breather between them: the surviving endpoint drops the
+  // odd call under a burst, and one immediate retry list-wide was not enough
+  // to ride that out.
+  for(let pass=0;pass<2;pass++){
+  if(pass>0) await new Promise(r=>setTimeout(r,900));
+  for(const url of order){
+    for(let i=0;i<2;i++){
+      // A dead endpoint that hangs instead of erroring would otherwise hold
+      // every caller for the browser's default fetch timeout. Cap it.
+      const ab=new AbortController();
+      const timer=setTimeout(()=>ab.abort(),12000);
+      try{
+        const r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({jsonrpc:"2.0",id:1,method,params}),signal:ab.signal});
+        const d=await r.json();
+        if("result" in d){ RPC_GOOD.set(key,url); return d.result; }
+        last=d.error&&d.error.message;
+      }catch(e){ last=e.message; }
+      finally{ clearTimeout(timer); }
+    }
+  }
+  }
+  throw new Error("RPC no answer ("+(last||"?")+")");
+}
+const rpcRead=(m,p)=>rpcVia(ARC_RPCS,m,p);
+const baseRead=(m,p)=>rpcVia(BASE_RPCS,m,p);
+const ethCall=(to,data)=>rpcRead("eth_call",[{to,data},"latest"]);
+const baseCall=(to,data)=>baseRead("eth_call",[{to,data},"latest"]);
+// The deposit side follows whichever source chain is selected; withdrawals
+// always land on Base, so they keep using baseRead above.
+const srcRead=(m,p)=>rpcVia(SRC.rpcs,m,p);
+const srcCall=(to,data)=>srcRead("eth_call",[{to,data},"latest"]);
+const dstRead=(m,p)=>rpcVia(DST.rpcs,m,p);
+const dstCall=(to,data)=>dstRead("eth_call",[{to,data},"latest"]);
+
+/* ============ chain chips ============ */
+const LOGO_ARC='<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.6" stroke="#7ea2ff" stroke-width="3.1" stroke-linecap="round" stroke-dasharray="38 16" transform="rotate(-50 12 12)"/></svg>';
+const LOGO_BASE='<svg width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5" fill="#0052FF"/><rect x="2.5" y="10.6" width="8.2" height="2.8" rx="1.4" fill="#fff"/></svg>';
+// A coloured disc keyed off the chain name, so a new source needs no artwork.
+const SRC_TINT={base:"#0052FF",arb:"#12AAFF",avax:"#E84142",pol:"#8247E5",eth:"#627EEA"};
+function logoFor(s){
+  if(s.key==="base") return LOGO_BASE;
+  return '<svg width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5" fill="'
+    +(SRC_TINT[s.key]||"#4c5563")+'"/><text x="12" y="16" text-anchor="middle" font-size="11"'
+    +' font-weight="700" fill="#fff" font-family="system-ui">'+s.name[0]+'</text></svg>';
+}
+function renderChips(){
+  const arc='<span style="display:flex">'+LOGO_ARC+'</span><b>Arc</b><small>USDC</small>';
+  // Only the non-Arc side is selectable, and only when depositing, since
+  // withdrawals always settle on Base.
+  const src='<span style="display:flex">'+logoFor(SRC)+'</span><b>'+SRC.name+'</b><small>USDC</small>'
+    +(DIR==="in"?'<span class="caret">&#9662;</span>':"");
+  const dst='<span style="display:flex">'+logoFor(DST)+'</span><b>'+DST.name+'</b><small>USDC</small>'
+    +(DIR==="out"?'<span class="caret">&#9662;</span>':"");
+  $("from-chain").innerHTML=DIR==="out"?arc:src;
+  $("to-chain").innerHTML=DIR==="out"?dst:arc;
+  $("from-chain").classList.toggle("pickable",DIR==="in");
+  $("to-chain").classList.toggle("pickable",DIR==="out");
+}
+
+/* ============ EIP-6963 wallet discovery ============ */
+const PROVIDERS=[];
+window.addEventListener("eip6963:announceProvider",ev=>{
+  const {info,provider}=ev.detail;
+  if(!PROVIDERS.find(p=>p.info.uuid===info.uuid)) PROVIDERS.push({info,provider});
+});
+window.dispatchEvent(new Event("eip6963:requestProvider"));
+function listWallets(){
+  const found=[...PROVIDERS];
+  if(!found.length&&window.ethereum){
+    found.push({info:{name:window.ethereum.isOkxWallet?"OKX Wallet":
+      window.ethereum.isRabby?"Rabby":window.ethereum.isMetaMask?"MetaMask":"Wallet",
+      icon:"",rdns:"injected"},provider:window.ethereum});
+  }
+  return found;
+}
+
+/* Shown in the footer so a stale cached page is obvious at a glance. */
+const BUILD="b81";
+let PROVIDER=null, ACCT=null, WNAME="", DIR="out", RUNNING=false;
+let STATUS="checking", ATTEST={done:0,total:0}, LIMIT_ARC=1000000n;
+let ARC_BAL=null, BASE_BAL=null;
+// Balance on the selected deposit source; equals BASE_BAL when that is Base.
+let SRC_BAL=null;
+function eth(){ if(!PROVIDER) throw new Error("no wallet selected"); return PROVIDER; }
+
+/* ============ modals ============ */
+function openM(id){ $(id).classList.add("open"); }
+function closeM(id){ $(id).classList.remove("open"); }
+document.querySelectorAll(".modal").forEach(m=>{
+  m.addEventListener("click",e=>{ if(e.target===m) m.classList.remove("open"); });
+  m.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>m.classList.remove("open"));
+});
+
+// Standard connect-modal behaviour: always open the wallet list (like
+// RainbowKit / Web3Modal), even when only one wallet is present, so the user
+// picks a WALLET. The account is then whatever is active in that wallet - no
+// separate account step, which is what real bridges do.
+function pickWallet(){
+  const found=listWallets();
+  return new Promise(res=>{
+    const list=$("w-list"); list.innerHTML="";
+    let settled=false;
+    const finish=v=>{ if(!settled){ settled=true; closeM("m-wallet"); res(v); } };
+    if(!found.length){
+      // A phone browser has no extensions, so "enable an extension" is useless
+      // advice there. Offer the thing that actually works: open this page
+      // inside the wallet app's own browser, one tap.
+      const onPhone=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      if(onPhone){
+        const raw=location.host+location.pathname+location.search;
+        list.innerHTML='<div class="mnote" style="color:var(--dim)">'+t("no_wallet_m")+'</div>';
+        [["MetaMask","https://metamask.app.link/dapp/"+raw],
+         ["OKX","okx://wallet/dapp/url?dappUrl="+encodeURIComponent(location.href)],
+         ["Coinbase","https://go.cb-w.com/dapp?cb_url="+encodeURIComponent(location.href)]
+        ].forEach(([name,href])=>{
+          const a=document.createElement("a");
+          a.href=href; a.target="_blank"; a.rel="noopener";
+          a.style.cssText="display:flex;align-items:center;gap:12px;background:#191d26;"
+            +"border:1px solid transparent;border-radius:12px;padding:13px 14px;color:var(--text);"
+            +"font:600 14.5px inherit;text-decoration:none";
+          a.innerHTML='<span class="wicon">&#9670;</span><span>'+name
+            +'<span class="sub">'+t("w_openin")+'</span></span>';
+          list.appendChild(a);
+        });
+      }else{
+        list.innerHTML='<div class="mnote" style="color:var(--dim)">'+t("no_wallet")+'</div>';
+      }
+    }
+    found.forEach(w=>{
+      const b=document.createElement("button");
+      b.innerHTML=(w.info.icon?'<img src="'+w.info.icon+'">':'<span class="wicon">◆</span>')
+        +'<span>'+w.info.name+'<span class="sub">'+t("w_installed")+'</span></span>'
+        +'<span class="wtag">'+t("w_detected")+'</span>';
+      b.onclick=()=>finish(w);
+      list.appendChild(b);
+    });
+    $("m-wallet").addEventListener("click",function h(e){
+      if(e.target===$("m-wallet")){ $("m-wallet").removeEventListener("click",h); finish(null); }});
+    $("m-wallet").querySelector("[data-close]").onclick=()=>finish(null);
+    openM("m-wallet");
+  });
+}
+/* ============ connect ============ */
+// Pick a wallet, then use whatever account is ACTIVE in it - the standard
+// flow. Changing accounts happens inside the wallet extension, and the
+// accountsChanged listener keeps the page in sync automatically.
+async function connectFlow(){
+  const w=await pickWallet(); if(!w) return;
+  PROVIDER=w.provider; WNAME=w.info.name;
+  let asked=[];
+  try{ asked=await eth().request({method:"eth_requestAccounts"}); }
+  catch(e){ return; }
+  const first=(asked||[]).find(a=>typeof a==="string"&&/^0x[0-9a-fA-F]{40}$/.test(a));
+  if(!first) return;
+  setAccount(first);
+  try{ localStorage.setItem("arcExitConnected","1");
+    localStorage.setItem("arcExitWalletRdns",w.info.rdns||w.info.name); }catch(e){}
+  attachListeners();
+  refreshAll();
+}
+// Whether this wallet will fold the exit into one confirmation on Arc. Asked
+// once per connected account so the quoted signature count is the real one
+// rather than the worst case. null until answered.
+let WALLET_BATCH=null;
+function setAccount(a){ ACCT=a; EXEMPT_NOW=false; WALLET_BATCH=null;
+  isFeeExempt(a).catch(()=>{});
+  if(a) walletBatchOK(ARC_HEX).then(v=>{ if(ACCT===a){ WALLET_BATCH=v; renderDetails(); } })
+    .catch(()=>{});
+  renderWalletBtn(); renderDetails(); }
+// "Switch account" pops the wallet's OWN account selector (the standard way),
+// then adopts whatever the user makes active - no custom account modal.
+async function switchAccount(){
+  if(!PROVIDER) return connectFlow();
+  try{ await eth().request({method:"wallet_requestPermissions",params:[{eth_accounts:{}}]}); }
+  catch(e){ return; }
+  try{ const acc=await eth().request({method:"eth_requestAccounts"});
+    const first=(acc||[]).find(a=>/^0x[0-9a-fA-F]{40}$/.test(a));
+    if(first){ setAccount(first); refreshAll(); }
+  }catch(e){}
+}
+// Block-explorer links so every hash is inspectable.
+const EXPLORER={};
+// arc-scan.io stopped resolving, so every Arc hash the page showed led nowhere.
+// A bridge whose receipts cannot be opened is exactly what a user checking up
+// on a new site is looking for.
+EXPLORER[ARC_CHAIN_ID]="https://arc.exploreme.pro/tx/";
+EXPLORER[BASE_CHAIN_ID]="https://basescan.org/tx/";
+EXPLORER[42161]="https://arbiscan.io/tx/";
+EXPLORER[43114]="https://snowtrace.io/tx/";
+EXPLORER[137]="https://polygonscan.com/tx/";
+EXPLORER[1]="https://etherscan.io/tx/";
+/* Hashes are interpolated straight into markup, so anything that is not a
+   real hash must never reach it. Stored records survive across sessions and
+   could be edited in devtools or arrive from a future import path, which is
+   exactly the sort of "our own data" that turns into an injection later. */
+const HASH_RE=/^0x[0-9a-fA-F]{64}$/;
+const ADDR_RE=/^0x[0-9a-fA-F]{40}$/;
+// Where the bridged funds land. Null means "the connected wallet", which is
+// the default and what almost everyone wants.
+let RECIP=null;
+function txLink(hash,chain){
+  if(!HASH_RE.test(String(hash||""))) return '<span class="mono">'+esc(hash)+'</span>';
+  const base=EXPLORER[chain]||EXPLORER[ARC_CHAIN_ID];
+  return '<a class="txl" href="'+base+hash+'" target="_blank" rel="noopener" title="'
+    +t("view_tx")+'">'+short(hash)+' ↗</a>';
+}
+function disconnect(){
+  ACCT=null; PROVIDER=null; WNAME=""; ARC_BAL=null; BASE_BAL=null; SRC_BAL=null;
+  try{ localStorage.removeItem("arcExitConnected"); }catch(e){}
+  closeM("m-menu"); renderWalletBtn(); renderBalances(); renderDetails(); updateCTA();
+}
+let LISTENED=false;
+function attachListeners(){
+  if(LISTENED||!PROVIDER||!PROVIDER.on) return; LISTENED=true;
+  PROVIDER.on("accountsChanged",a=>{
+    ACCT=(a&&a[0])||null;
+    renderWalletBtn(); renderDetails(); refreshAll();
+  });
+  PROVIDER.on("chainChanged",()=>{ refreshBalances(); });
+}
+async function silentReconnect(){
+  if(ACCT) return;
+  let flag=null; try{ flag=localStorage.getItem("arcExitConnected"); }catch(e){}
+  if(flag!=="1") return;
+  const found=listWallets(); if(!found.length) return;
+  let saved=null; try{ saved=localStorage.getItem("arcExitWalletRdns"); }catch(e){}
+  const w=found.find(x=>(x.info.rdns||x.info.name)===saved)||
+          (found.length===1?found[0]:null);
+  if(!w) return;
+  try{
+    const acc=await w.provider.request({method:"eth_accounts"});
+    if(acc&&acc.length){ PROVIDER=w.provider; WNAME=w.info.name;
+      setAccount(acc[0]); attachListeners(); refreshAll(); }
+  }catch(e){}
+}
+/* Source picker. Arbitrum is flagged because it is the only route into Arc
+   with measured evidence behind it; the rest are listed with Circle's own
+   price so the choice is informed rather than blind. */
+function openChainPicker(forDest){
+  const list=$("src-list"); list.innerHTML="";
+  SOURCES.forEach(s=>{
+    const b=document.createElement("button");
+    b.innerHTML='<span class="wicon" style="background:none">'+logoFor(s)+'</span>'
+      +'<span><b>'+s.name+'</b>'
+      +(!forDest&&s.proven?' <span class="pill ok">'+t("src_proven")+'</span>':"")
+      +(forDest&&s.gas==="low"?' <span class="pill ok">'+t("dst_cheap")+'</span>':"")
+      +'<span class="sub">'+(forDest?t("dst_free"):(s.fastFee===0?t("src_nofee"):t("src_fee")))+'</span></span>';
+    b.onclick=()=>{
+      if(forDest){ DST=s; try{ localStorage.setItem("arcExitDst",s.key); }catch(e){} }
+      else{ SRC=s; try{ localStorage.setItem("arcExitSrc",s.key); }catch(e){} }
+      closeM("m-src");
+      renderChips(); renderDetails(); refreshBalances(); updateCTA();
+    };
+    list.appendChild(b);
+  });
+  $("src-note").textContent=t(forDest?"dst_note":"src_note");
+  $("m-src").querySelector(".mhead span").textContent=t(forDest?"dst_pick":"src_pick");
+  openM("m-src");
+}
+function renderWalletBtn(){
+  const b=$("h-wallet");
+  if(ACCT){ b.classList.remove("cta-like");
+    b.innerHTML='<span class="dot"></span>'+short(ACCT);
+  }else{ b.classList.add("cta-like"); b.textContent=t("cta_connect"); }
+}
+
+/* ============ status (exit-open guard) ============ */
+/* Is Circle signing Arc burns right now? Sample SEVERAL recent burns, not one.
+   Judging by the single latest burn declares the bridge dead whenever that one
+   burn is newer than Circle's signing delay, which would block every user for
+   no reason. One attested burn among the sample proves the lane is alive. */
+async function checkAttesting(){
+  const head=Number(numHex(await rpcRead("eth_blockNumber",[])));
+  // Skip only the last few minutes. A burn seconds old is not indexed by Circle
+  // yet, so asking about it answers nothing. Everything older is fair game: an
+  // earlier version threw away the newest hour entirely, and Arc is quiet
+  // enough that the remaining windows held no burns at all, which the code then
+  // read as a dead lane and used to block withdrawals on a working bridge.
+  const SKIP=600;      // ~5 minutes at 0.507s blocks
+  const SPAN=9999;     // the RPCs cap eth_getLogs at a 10,000 block range
+  const found=[];
+  for(let w=0;w<8&&found.length<4;w++){
+    const to=head-SKIP-w*(SPAN+1), from=to-SPAN;
+    if(to<=0) break;
+    try{ const logs=await rpcRead("eth_getLogs",[{topics:[TOPIC_DEPOSIT_BURN],
+      fromBlock:hexNum(Math.max(0,from)),toBlock:hexNum(to)}]);
+      // Walk newest-first but keep a spread, so one busy moment cannot
+      // monopolise the sample.
+      for(let i=(logs||[]).length-1;i>=0&&found.length<4;i--){
+        const h=logs[i].transactionHash;
+        if(!found.some(f=>f.hash===h))
+          found.push({hash:h,block:Number(numHex(logs[i].blockNumber))});
+      }
+    }catch(e){}
+  }
+  // Finding nothing to sample means the question could not be asked. On a chain
+  // this quiet that is ordinary, and it is not evidence the lane is shut.
+  if(!found.length) return {open:false,done:0,total:0,unknown:true};
+  let done=0,total=0,seen=0;
+  for(const f of found){
+    try{
+      const r=await fetch(IRIS+"/messages/"+ARC_DOMAIN+"?transactionHash="+f.hash);
+      const d=await r.json(); const msgs=(d&&d.messages)||[];
+      if(!msgs.length) continue;
+      seen++;
+      total+=msgs.length;
+      done+=msgs.filter(m=>m.status==="complete"&&String(m.attestation||"").startsWith("0x")).length;
+      if(done>0) break;   // one attested burn is enough to prove the lane works
+    }catch(e){}
+  }
+  if(!seen) return {open:false,done:0,total:0,unknown:true};
+  // Nothing attested yet only means a stall if something in the sample is old
+  // enough that Circle should already have signed it. A sample of burns minutes
+  // old proves nothing either way.
+  const RIPE=1800;     // ~15 minutes
+  if(done===0&&!found.some(f=>head-f.block>RIPE))
+    return {open:false,done,total,unknown:true};
+  return {open:done>0,done,total};
+}
+async function refreshStatus(){
+  STATUS="checking"; renderStatus();
+  try{ const lim=numHex(await ethCall(TOKEN_MINTER,SEL.burnLimit+pad32(ARC_USDC)));
+    if(lim>0n) LIMIT_ARC=lim; }catch(e){}
+  // Quote the rate the contract actually holds. Reading it only at send time
+  // left the details row showing the compiled-in default, so the page said 2%
+  // while the chain said 0% - the one number a user checks before signing.
+  if(BATCH_CONTRACT){ FEE_BPS_CACHE=null; try{ await liveFeeBps(); }catch(e){} }
+  if(CLAIM_CONTRACT){ try{ CLAIM_PER_CALL=await claimPerCall(); }catch(e){} }
+  try{
+    const a=await checkAttesting();
+    ATTEST={done:a.done||0,total:a.total||0};
+    // Never turn "we could not ask" into "the bridge is broken".
+    STATUS=a.open?"open":(a.unknown?"unknown":"shut");
+  }catch(e){ STATUS="unknown"; }
+  renderStatus(); renderDetails(); updateCTA();
+}
+function renderStatus(){
+  const p=$("h-status");
+  p.className="statuspill "+(STATUS==="open"?"open":STATUS==="shut"?"shut":STATUS==="unknown"?"unknown":"");
+  $("h-status-t").textContent=t(STATUS==="open"?"st_open":STATUS==="shut"?"st_shut":
+    STATUS==="unknown"?"st_unknown":"st_checking");
+  const d=$("det-status");
+  if(STATUS==="open") d.innerHTML='<span style="color:var(--ok)">'+t("status_open_d")+" "+ATTEST.done+"/"+ATTEST.total+"</span>";
+  else if(STATUS==="shut") d.innerHTML='<span style="color:var(--bad)">'+t("status_shut_d")+"</span>";
+  else if(STATUS==="unknown") d.innerHTML='<span style="color:var(--warn)">'+t("status_unknown_d")+"</span>";
+  else d.textContent="…";
+}
+
+/* ============ balances / details / cta ============ */
+async function refreshBalances(){
+  if(!ACCT){ ARC_BAL=null; BASE_BAL=null; SRC_BAL=null; renderBalances(); return; }
+  const me=ACCT;
+  try{ const b=numHex(await ethCall(ARC_USDC,SEL.balanceOf+pad32(me)));
+    if(me===ACCT) ARC_BAL=b; }catch(e){ if(me===ACCT) ARC_BAL=null; }
+  // Withdrawals land on Base, so that balance is always read. Deposits read
+  // whichever source is selected, which may be a different chain entirely.
+  try{ const b=numHex(await baseCall(BASE_USDC,SEL.balanceOf+pad32(me)));
+    if(me===ACCT) BASE_BAL=b; }catch(e){ if(me===ACCT) BASE_BAL=null; }
+  if(SRC.chainId===BASE_CHAIN_ID){ SRC_BAL=BASE_BAL; }
+  else{
+    try{ const b=numHex(await srcCall(SRC.usdc,SEL.balanceOf+pad32(me)));
+      if(me===ACCT) SRC_BAL=b; }catch(e){ if(me===ACCT) SRC_BAL=null; }
+  }
+  renderBalances(); updateCTA();
+}
+function renderBalances(){
+  const fmt=v=>v===null?"0.00":usdc(v);
+  $("from-bal").textContent=DIR==="out"?fmt(ARC_BAL):fmt(SRC_BAL);
+  $("to-bal").textContent=DIR==="out"?fmt(BASE_BAL):fmt(ARC_BAL);
+}
+// The service rate lives on-chain and can be retuned, so read it once and
+// cache it rather than baking a number into the page that could go stale.
+const DEFAULT_FEE_BPS=200;   // used only when the live rate cannot be read
+// Deposits are charged the same 3% as withdrawals, taken on the source chain.
+const DEPOSIT_FEE_BPS=200;
+// Relayer pickup tag, read out of delivered transfers' DepositForBurn events.
+const HOOK_TAG="0x636374702d666f7277617264";   // ascii "cctp-forward"
+// Just above the observed 0.0172 charge; the tag ecosystem pays exact quotes.
+const FWD_MAX_FEE=20000n;
+const FEE_RECIPIENT="0x20f7F91a102F711099509d0044EdFC351Fe18fF8";
+let FEE_BPS_CACHE=null;
+/* Operator wallets pay nothing. On the withdrawal side the contract enforces
+   this via feeExempt, so the page must read it rather than assume, or it would
+   quote and approve a fee the contract will not take. On the deposit side
+   there is no contract, so the page skips the fee transfer for the same
+   addresses. Checked live per account, never hardcoded to a build. */
+let EXEMPT_CACHE={};
+// Mirrors the async check so synchronous renders can quote the right number.
+// Starts true on a local run with no contract, so the first render (before any
+// wallet is connected) quotes the operator rate instead of flashing 2%. With a
+// contract deployed the chain decides, so it starts false and is filled in by
+// the live read.
+let EXEMPT_NOW=NOFEE&&!BATCH_CONTRACT;
+async function isFeeExempt(who){
+  if(!who) return false;
+  const k=who.toLowerCase();
+  // Once a batch contract exists it is the authority, and the local override
+  // must not answer for it: the page passes the rate it believes into
+  // batchExit, and a local "free" that the contract does not share makes every
+  // batch revert with FeeChangedMidFlight. Local-free only applies to the
+  // page-collected fee, which is the no-contract path.
+  // Set synchronously so the render that follows this call quotes it correctly.
+  if(NOFEE&&!BATCH_CONTRACT){ EXEMPT_CACHE[k]=true; EXEMPT_NOW=true; return true; }
+  if(EXEMPT_CACHE[k]!==undefined) return EXEMPT_CACHE[k];
+  let ex=false;
+  if(BATCH_CONTRACT){
+    try{ const v=await ethCall(BATCH_CONTRACT,SEL.feeExempt+pad32(who));
+      ex=(numHex(v)===1n); }catch(e){ ex=false; }
+  }
+  EXEMPT_CACHE[k]=ex;
+  if(ACCT&&ACCT.toLowerCase()===k){ EXEMPT_NOW=ex; renderDetails(); }
+  return ex;
+}
+async function liveFeeBps(){
+  if(ACCT&&await isFeeExempt(ACCT)) return 0;
+  if(FEE_BPS_CACHE!==null) return FEE_BPS_CACHE;
+  if(!BATCH_CONTRACT){ FEE_BPS_CACHE=0; return 0; }
+  try{
+    const v=await ethCall(BATCH_CONTRACT,SEL.feeBps);
+    // An empty answer means the call did not reach a contract, not that the
+    // fee is zero. Reading it as zero would under-quote the user and make the
+    // contract reject their transaction, so fall back to the expected rate.
+    const ok=typeof v==="string"&&strip(v).length>=2;
+    const n=ok?Number(numHex(v)):NaN;
+    FEE_BPS_CACHE=(Number.isFinite(n)&&n>=0&&n<=500)?n:DEFAULT_FEE_BPS;
+  }catch(e){ FEE_BPS_CACHE=DEFAULT_FEE_BPS; }
+  renderDetails();
+  return FEE_BPS_CACHE;
+}
+// The contract pulls principal + fee, so from a user-entered send amount X the
+// principal that actually crosses is X / (1 + rate). Deposits are free.
+// The fee applies with or without the batch contract: with it the contract
+// takes it, without it the page sends it as a transfer first. Either way the
+// number quoted here is what the user actually receives.
+function feeApplied(a){
+  if(EXEMPT_NOW) return a;
+  if(DIR==="in") return a*10000n/(10000n+BigInt(DEPOSIT_FEE_BPS));
+  const bps=BigInt(BATCH_CONTRACT
+    ? (FEE_BPS_CACHE===null?DEFAULT_FEE_BPS:FEE_BPS_CACHE)
+    : DEFAULT_FEE_BPS);
+  return a*10000n/(10000n+bps);
+}
+// Burns per batchExit call. The contract allows 600, but measured reality is
+// ~45k gas per burn against a 30M block limit - 600 would fill 90% of a block
+// and fail whenever it is not empty. 400 (~18M, 60%) always fits.
+const BURNS_PER_CALL=400n;
+// How many batchExit signatures a principal of P needs (BURNS_PER_CALL burns
+// per call, plus one extra call when there is a sub-cap remainder).
+function batchCalls(P,cap){
+  const full=Number(P/cap), rem=P%cap>0n?1:0;
+  return Math.max(1,Math.ceil(full/Number(BURNS_PER_CALL))+rem);
+}
+function renderDetails(){
+  $("det-addr").textContent=RECIP?short(RECIP):(ACCT?short(ACCT):t("cta_connect"));
+  // Deposits ride Circle's paid fast lane, so quote that ceiling honestly
+  // rather than claiming the transfer is free.
+  // Deposits buy the fast lane, so quote that cost rather than claiming free.
+  if(EXEMPT_NOW){ $("det-fee").textContent=t("fee_exempt"); }
+  else if(DIR==="in"){
+    $("det-fee").textContent=(DEPOSIT_FEE_BPS/100).toFixed(2)+"%";
+  }else{
+    const bps=BATCH_CONTRACT?(FEE_BPS_CACHE===null?DEFAULT_FEE_BPS:FEE_BPS_CACHE):DEFAULT_FEE_BPS;
+    $("det-fee").textContent=(bps/100).toFixed(2)+"%";
+  }
+  $("det-route").textContent=t("route_v");
+  const amt=parseUsdc($("amount").value);
+  if(DIR==="out"){
+    const eff=feeApplied(amt||0n);
+    const n=eff>0n?Number((eff+LIMIT_ARC-1n)/LIMIT_ARC):1;
+    if(amt&&n>1){
+      $("row-split").hidden=false;
+      // Both halves, not just the burn. Quoting only the Arc side said "about 2"
+      // and then asked for four more on Base, which is worse than saying nothing.
+      let src,dst;
+      if(BATCH_CONTRACT){ src=1+batchCalls(eff,LIMIT_ARC); }   // approve + batchExit calls
+      else{ src=WALLET_BATCH?2:(n+1); }
+      if(CLAIM_CONTRACT&&DST.chainId===BASE_CHAIN_ID) dst=Math.ceil(n/Math.max(1,CLAIM_PER_CALL));
+      else dst=WALLET_BATCH?Math.ceil(n/Math.max(1,batchHint(DST.chainId))):n;
+      const sigs=src+dst;
+      $("det-split").textContent=n+" × "+usdc(LIMIT_ARC)+" USDC · "
+        +t("sig_about")+" "+sigs+t("sig_times")+" ("+DST.name+" "+dst+")";
+      $("row-split").classList.toggle("warn",sigs>10);
+      /* Suggest an amount that costs one signature less.
+         Two things add a call. A principal over 400 USDC needs another
+         batchExit, and - less obviously - a principal with a fractional
+         remainder needs its own call for that last sub-1-USDC piece, because
+         batchExit burns a uniform amountEach. The fee makes that remainder the
+         normal case: type 400 at 2% and the principal is 392.156862, so the
+         quote jumps to four. Round the principal down to whole USDC and quote
+         the spend that lands there, which is always at or below what was
+         typed - never ask for more money to save a click. */
+      const tip=$("split-tip");
+      const bpsNow=EXEMPT_NOW?0:(BATCH_CONTRACT
+        ? (FEE_BPS_CACHE===null?DEFAULT_FEE_BPS:FEE_BPS_CACHE) : DEFAULT_FEE_BPS);
+      const whole=eff/LIMIT_ARC;                       // full 1-USDC pieces
+      const hasRem=(eff%LIMIT_ARC)>0n;
+      // Only drop the fractional tail. Clamping to 400 as well would tell
+      // someone withdrawing 800 to send 408, which is not advice, it is asking
+      // them to move half their money.
+      const want=whole*LIMIT_ARC*(10000n+BigInt(bpsNow))/10000n;
+      const better=hasRem&&whole>0n&&want>0n&&want<amt;
+      if(better){
+        const txt=usdc(want);
+        tip.hidden=false;
+        tip.innerHTML=t("tip_opt_a")+'<button class="lnk" id="tip-opt">'+txt
+          +' USDC</button>'+t("tip_opt_b");
+        const b=$("tip-opt");
+        if(b) b.onclick=()=>{ $("amount").value=txt; renderDetails(); updateCTA(); };
+      }else tip.hidden=true;
+    }else{
+      // Hide the suggestion too. Leaving it up meant a 0.5 USDC entry still
+      // showed advice computed for the previous, much larger amount.
+      $("row-split").hidden=true;
+      $("split-tip").hidden=true;
+    }
+    // Signing dominates the wait, and measured Arc burns were signed well
+    // inside half an hour, so quote a range instead of a flattering single
+    // number. Many pieces add signing time on top.
+    const base=BATCH_CONTRACT?10:Math.max(5,Math.ceil(n*1.5));
+    $("det-time").textContent=base>=60
+      ? t("time_about")+" "+Math.round(base/60)+t("hour")
+      : base+"~"+(base+20)+t("min");
+  }else{
+    $("row-split").hidden=true;
+    // The fast lane skips waiting on Base finality, so this is minutes.
+    $("det-time").textContent=t("time_dep");
+  }
+  // Deposits get a standing caution, not just a hint. Circle's delivery into
+  // Arc is sporadic (the last inbound from Base landed days before this was
+  // written, and a real test sat pending for hours), and a user deserves to
+  // know that before committing rather than after.
+  const hint=$("dir-hint");
+  hint.classList.remove("caution");
+  hint.textContent=t(DIR==="out"?(BATCH_CONTRACT?"hint_out_b":"hint_out"):"hint_in");
+  const rc=$("receive");
+  rc.classList.toggle("haveamt",!!(amt&&amt>0n));
+  rc.textContent=amt&&amt>0n?usdc(feeApplied(amt)):"0";
+}
+function updateCTA(){
+  const b=$("cta");
+  const amt=parseUsdc($("amount").value);
+  const bal=DIR==="out"?ARC_BAL:BASE_BAL;
+  b.classList.remove("danger");
+  if(RUNNING){ b.disabled=true; b.textContent=t("cta_running"); return; }
+  if(!ACCT){ b.disabled=false; b.textContent=t("cta_connect"); return; }
+  if(!amt||amt<=0n){ b.disabled=true; b.textContent=t("cta_amount"); return; }
+  if(bal!==null&&amt>bal){ b.disabled=true; b.textContent=t("cta_insuf"); return; }
+  if(DIR==="out"){
+    if(STATUS==="checking"){ b.disabled=true; b.textContent=t("cta_checking"); return; }
+    // Only "shut" blocks. "unknown" means the one Arc RPC did not answer this
+    // round, not that Circle stopped signing - and with a single endpoint that
+    // will happen. Blocking on it would strand a user whose funds are fine, so
+    // let them proceed; the burn itself re-checks and the funds are recoverable
+    // regardless.
+    if(STATUS==="shut"){ b.disabled=true; b.classList.add("danger"); b.textContent=t("cta_shut"); return; }
+  }
+  b.disabled=false; b.textContent=t(DIR==="out"?"cta_out":"cta_in");
+}
+
+/* ============ tx plumbing ============ */
+async function ensureChain(chainId){
+  const cur=Number(numHex(await eth().request({method:"eth_chainId"})));
+  if(cur===chainId) return;
+  const src=SOURCES.find(x=>x.chainId===chainId);
+  const hexId=chainId===ARC_CHAIN_ID?ARC_HEX:(src?src.hex:BASE_HEX);
+  try{ await eth().request({method:"wallet_switchEthereumChain",params:[{chainId:hexId}]}); }
+  catch(e){
+    if(chainId===ARC_CHAIN_ID){
+      await eth().request({method:"wallet_addEthereumChain",params:[{chainId:ARC_HEX,
+        chainName:"Arc",nativeCurrency:{name:"USDC",symbol:"USDC",decimals:18},
+        rpcUrls:ARC_RPCS.slice(0,2),blockExplorerUrls:[]}]});
+      await eth().request({method:"wallet_switchEthereumChain",params:[{chainId:ARC_HEX}]});
+    }else throw e;
+  }
+}
+async function sendTx(to,data,chainWanted,gasFloor){
+  await ensureChain(chainWanted);
+  const tx={from:ACCT,to,data};
+  /* Feed the gas fields from a live RPC on every chain, not just Arc.
+     Without them OKX reports "Network fee estimation unsuccessful" and greys
+     out Confirm. This was known for Arc and left unfixed everywhere else, so
+     the destination claim silently failed and fell back to wallet batching -
+     which is exactly the pile of confirmations the claim contract exists to
+     remove. A large claim also needs far more gas than a wallet's default
+     guess, which is what gasFloor is for. */
+  const reader=chainWanted===ARC_CHAIN_ID
+    ? rpcRead
+    : (m,p)=>{ const s=SOURCES.find(x=>x.chainId===chainWanted);
+        return s?rpcVia(s.rpcs,m,p):dstRead(m,p); };
+  try{
+    let gas;
+    try{ gas=await reader("eth_estimateGas",[{from:ACCT,to,data}]);
+      gas=hexNum(numHex(gas)*13n/10n); }
+    catch(e){ gas=hexNum(BigInt(gasFloor||600000)); }
+    tx.gas=gas;
+    const blk=await reader("eth_getBlockByNumber",["latest",false]);
+    const base=(blk&&blk.baseFeePerGas)?numHex(blk.baseFeePerGas):0n;
+    if(base>0n){
+      let tip=chainWanted===ARC_CHAIN_ID?2000000000n:1000000n;
+      try{ const v=numHex(await reader("eth_maxPriorityFeePerGas",[])); if(v>0n) tip=v; }catch(e){}
+      tx.maxPriorityFeePerGas=hexNum(tip); tx.maxFeePerGas=hexNum(base*2n+tip);
+    }else{ const p=await reader("eth_gasPrice",[]); tx.gasPrice=hexNum(numHex(p)*12n/10n); }
+    try{ tx.nonce=await reader("eth_getTransactionCount",[ACCT,"pending"]); }catch(e){}
+  }catch(e){}
+  return eth().request({method:"eth_sendTransaction",params:[tx]});
+}
+/* Wallet-side batching (EIP-5792). Arc caps a CCTP message at 1 USDC, so a $10
+   exit is ten burns and, on a plain EOA, ten confirmations. The batch contract
+   fixes that but has to be deployed and funded first. A wallet that implements
+   the Wallet Call API does the same job with no contract at all: the fee, the
+   approval and every burn go out under one confirmation. Support is per chain
+   and most wallets have not wired up Arc, so it is asked for, never assumed,
+   and the one-at-a-time path stays as the fallback. */
+async function walletBatchOK(chainHex){
+  try{
+    const caps=await eth().request({method:"wallet_getCapabilities",params:[ACCT,[chainHex]]});
+    const c=caps&&(caps[chainHex]||caps[String(chainHex).toLowerCase()]);
+    if(!c) return false;
+    // Two shapes are in the wild: the current atomic.status, and atomicBatch
+    // .supported from the earlier draft.
+    const st=c.atomic&&String(c.atomic.status||"").toLowerCase();
+    if(st==="supported"||st==="ready") return true;
+    return !!(c.atomicBatch&&c.atomicBatch.supported);
+  }catch(e){ return false; }
+}
+async function sendCalls(calls,chainHex){
+  const res=await eth().request({method:"wallet_sendCalls",params:[{
+    version:"2.0.0",from:ACCT,chainId:chainHex,atomicRequired:true,
+    calls:calls.map(c=>({to:c.to,data:c.data}))}]});
+  return (res&&res.id)?res.id:res;   // 2.0.0 returns {id}; the draft returned a string
+}
+/* onSeen fires the moment the wallet reveals a transaction hash, before the
+   batch is confirmed. Once the burn is on chain the funds are already inside
+   Circle, and the only way to collect them later is that hash, so it has to be
+   written down before anything else can go wrong: a closed tab or a dropped
+   connection between here and confirmation must not lose it. */
+async function waitCalls(id,onTick,onSeen){
+  const told=new Set();
+  for(let i=0;i<200;i++){
+    await new Promise(r=>setTimeout(r,3000));
+    let s=null;
+    try{ s=await eth().request({method:"wallet_getCallsStatus",params:[id]}); }catch(e){ continue; }
+    const code=Number(s&&s.status);
+    onTick&&onTick(code,i);
+    const rc=(s&&s.receipts)||[];
+    const hashes=[...new Set(rc.map(r=>r&&r.transactionHash).filter(Boolean))];
+    if(onSeen) for(const h of hashes) if(!told.has(h)){ told.add(h); onSeen(h); }
+    // 400 = the wallet/chain refused it before execution, so nothing was spent.
+    // 500 = it executed and reverted, which did cost gas. Tag the error so the
+    // caller can retry cheaply in the first case and back off hard in the second.
+    if(code>=400){
+      const err=new Error("batch rejected, status "+code);
+      err.status=code; err.free=(code<500);
+      throw err;
+    }
+    if(code===200||String(s&&s.status).toUpperCase()==="CONFIRMED"){
+      if(rc.some(r=>r&&r.status!==undefined&&numHex(r.status)===0n))
+        throw new Error("execution reverted");
+      // Atomic execution puts every call in one transaction, so dedupe.
+      return hashes;
+    }
+  }
+  throw new Error("no receipt");
+}
+async function waitReceipt(txHash,chain){
+  const rsrc=SOURCES.find(x=>x.chainId===chain);
+  const reader=chain===ARC_CHAIN_ID?rpcRead:(rsrc?(m,pp)=>rpcVia(rsrc.rpcs,m,pp):baseRead);
+  for(let i=0;i<90;i++){
+    await new Promise(r=>setTimeout(r,3000));
+    try{ const rec=await eth().request({method:"eth_getTransactionReceipt",params:[txHash]});
+      if(rec) return rec; }catch(e){}
+    try{ const rec=await reader("eth_getTransactionReceipt",[txHash]);
+      if(rec) return rec; }catch(e){}
+  }
+  throw new Error("no receipt: "+txHash);
+}
+function encodeTwoBytes(aHex,bHex){
+  const a=strip(aHex),b=strip(bHex),aLen=a.length/2,bLen=b.length/2;
+  const aPad=a+"".padEnd((32-(aLen%32))%32*2,"0"), bPad=b+"".padEnd((32-(bLen%32))%32*2,"0");
+  const off1=64, off2=off1+32+aPad.length/2;
+  return pad32(hexNum(off1))+pad32(hexNum(off2))+pad32(hexNum(aLen))+aPad+pad32(hexNum(bLen))+bPad;
+}
+// 160 ticks x 15s = 40 minutes. Base-sourced messages wait on Base finality
+// (~15 min typical, longer when the network is busy), and the old 20-minute
+// ceiling was reporting healthy transfers as failures.
+/* Choosing the CCTP lane, learned the hard way.
+
+   maxFee is a CEILING, not a price: Circle deducts only what it actually
+   charges. A real deposit stalled for hours because the ceiling was set to
+   0.1% of the amount, below the ~0.017 USDC Circle actually wanted, so the
+   message could never be executed.
+
+   Circle publishes a free "finalized" lane (threshold 2000) on every route,
+   but decoding the messages that genuinely arrived on Arc shows every one of
+   them executed on the paid fast lane (1000). With no observed evidence that
+   the free lane delivers here, the paid one is used wherever it costs money,
+   with a ceiling generous enough to actually execute. Where Circle charges
+   nothing (Arc->Base) the ceiling stays at zero, so no fee can ever be taken. */
+/* Picking the lane, decided by decoding what actually arrived on Arc.
+
+   The decisive fact: in every message observed landing, feeExecuted equalled
+   maxFee exactly. Circle takes the whole ceiling rather than trimming it to a
+   real cost, so a "generous" ceiling is not caution, it is an overcharge the
+   user silently pays.
+
+   Consequences:
+    - Where Circle prices the lane at zero, set the ceiling to zero. Nothing
+      can then be deducted. Arc->Base is such a lane, and it is the one proven
+      with real funds.
+    - Base->Arc is only free on the finalized lane, which has been observed
+      delivering 495 and 589 USDC. Its fast lane carries a price we cannot
+      pin down (the published number does not match anything actually charged),
+      and no Base->Arc fast transfer has ever been observed, so paying a
+      guessed ceiling there would be both an overcharge and unproven.
+
+   So: take the cheapest lane Circle prices at zero, and never set a ceiling
+   above zero on a lane priced at zero. */
+/* Always take the fast lane (threshold 1000), paying for it where Circle
+   charges. Timing fourteen arrivals settled why this matters, and it is not
+   the source chain: every one of the eleven that came in on the fast lane
+   landed within minutes, while all three that took the free finalized lane
+   waited between 8.9 and 11.6 DAYS. The lane is the whole difference.
+
+   Where Circle prices the fast lane at zero (Arc->Base) the ceiling stays
+   zero, so nothing is deducted. Where it charges (Base->Arc) we allow a few
+   cents: observed fast-lane charges are around 0.017 USDC, and since Circle
+   consumes whatever ceiling is offered, the ceiling is kept small rather than
+   generous. Paying five cents to avoid a ten-day wait is not a close call. */
+const LANE_CACHE={};
+const FAST_FEE_FLOOR=50000n;           // 0.05 USDC
+// Headroom carried on routes Circle currently quotes at zero. Small enough that
+// it cannot eat a 1 USDC piece, large enough to survive a quote change.
+const FREE_LANE_CEILING=10000n;        // 0.01 USDC
+function fastCeiling(amount){
+  const pct=amount/1000n;              // 0.1% for large transfers
+  return pct>FAST_FEE_FLOOR?pct:FAST_FEE_FLOOR;
+}
+async function pickLane(srcDomain,dstDomain,amount){
+  const key=srcDomain+">"+dstDomain;
+  if(LANE_CACHE[key]===undefined){
+    let costs=true;                    // unknown pricing is treated as paid
+    try{
+      const r=await fetch(IRIS+"/burn/USDC/fees/"+srcDomain+"/"+dstDomain);
+      const d=await r.json();
+      const list=Array.isArray(d)?d:((d&&d.value)||[]);
+      const fast=list.find(o=>Number(o.finalityThreshold)===1000);
+      if(fast&&Number(fast.minimumFee)===0) costs=false;
+    }catch(e){}
+    LANE_CACHE[key]=costs;
+  }
+  const costs=LANE_CACHE[key];
+  // maxFee is a ceiling, not a payment: Circle charges the real fee and nothing
+  // more, so a route quoted at zero still gets one. A burn signed while the
+  // quote says free becomes undeliverable if the price moves before it lands,
+  // which is exactly how a transfer got stranded once. The ceiling costs the
+  // user nothing while the route stays free, and saves the transfer if it does
+  // not. Quoted-paid routes keep the wider ceiling.
+  return {finality:1000, free:!costs,
+          maxFee:costs?fastCeiling(amount||0n):FREE_LANE_CEILING};
+}
+/* Every attested message in one transaction, not just the first. A batched burn
+   puts many CCTP messages under a single hash, and taking [0] would mint one
+   piece and silently strand the rest. Correct for plain single-message txs too,
+   where it returns a one-element list. */
+async function pollAttestationAll(txHash,srcDomain,onTick){
+  for(let i=0;i<160;i++){
+    try{
+      const r=await fetch(IRIS+"/messages/"+srcDomain+"?transactionHash="+txHash);
+      const d=await r.json(); const msgs=(d&&d.messages)||[];
+      const done=msgs.filter(m=>m.status==="complete"&&String(m.attestation||"").startsWith("0x"));
+      if(msgs.length&&done.length===msgs.length) return done;
+      onTick&&onTick(msgs.length?(done.length+"/"+msgs.length):"indexing",i);
+    }catch(e){ onTick&&onTick("retry",i); }
+    await new Promise(r=>setTimeout(r,15000));
+  }
+  return [];
+}
+async function pollAttestation(txHash,srcDomain,onTick){
+  for(let i=0;i<160;i++){
+    try{ const r=await fetch(IRIS+"/messages/"+srcDomain+"?transactionHash="+txHash);
+      const d=await r.json(); const m=((d&&d.messages)||[])[0];
+      if(m&&m.status==="complete"&&String(m.attestation||"").startsWith("0x")) return m;
+      onTick&&onTick(m?(m.status||"pending"):"indexing",i);
+    }catch(e){ onTick&&onTick("retry",i); }
+    await new Promise(r=>setTimeout(r,15000));
+  }
+  return null;
+}
+
+/* ============ local history ============ */
+// A record whose hash is not a real hash is unusable for recovery anyway, so
+// drop it here rather than letting it reach markup.
+function loadBurns(){
+  try{
+    const a=JSON.parse(localStorage.getItem("arcExitBurns")||"[]");
+    return Array.isArray(a)?a.filter(r=>r&&HASH_RE.test(String(r.tx||""))):[];
+  }catch(e){ return []; }
+}
+function saveBurn(rec){ const a=loadBurns(); a.unshift(rec);
+  try{ localStorage.setItem("arcExitBurns",JSON.stringify(a.slice(0,80))); }catch(e){} }
+function markMinted(tx){ const a=loadBurns();
+  for(const r of a) if(r.tx===tx) r.minted=true;
+  try{ localStorage.setItem("arcExitBurns",JSON.stringify(a)); }catch(e){} }
+function renderHistory(){
+  const a=loadBurns(), el=$("hist-list");
+  if(!a.length){ el.innerHTML='<div class="mnote">'+t("h_empty")+'</div>'; return; }
+  el.innerHTML=a.map(r=>{
+    const dir=r.dir==="in"?t("h_in"):t("h_out");
+    const st=r.minted?'<span class="pill ok">'+t("h_done")+'</span>'
+      :(r.dir==="in"?'<span class="pill warn">?</span>'
+        :'<button class="sbtn" style="flex:0 0 auto;white-space:nowrap;padding:5px 12px" data-hredeem="'+r.tx+'">'+t("rec_go")+'</button>');
+    // The saved hash is the burn: on Arc for a withdrawal, on Base for a deposit.
+    const chain=r.dir==="in"?rs.chainId:ARC_CHAIN_ID;
+    return '<div class="hrow"><span class="l">'+dir+' · '+usdc(BigInt(r.amount||"0"))+' USDC'
+      +'<span class="sub" style="display:block">'+txLink(r.tx,chain)+' · '+(r.at||"")+'</span></span>'+st+'</div>';
+  }).join("");
+  el.querySelectorAll("[data-hredeem]").forEach(b=>b.onclick=()=>{
+    closeM("m-history"); $("burntx").value=b.getAttribute("data-hredeem");
+    openM("m-recover"); recover(true);
+  });
+}
+/* ============ in-flight tracker ============
+   "Did my money move?" must be answerable by looking at the page, including
+   after a reload, so unfinished burns are read back from localStorage and
+   checked against Circle on every visit. */
+let FLIGHT_TIMER=null;
+function minsSince(iso){
+  const t=Date.parse(iso+(iso&&iso.length===16?":00Z":""));
+  if(isNaN(t)) return null;
+  return Math.max(0,Math.round((Date.now()-t)/60000));
+}
+async function refreshInflight(){
+  const el=$("inflight"); if(!el) return;
+  const open=loadBurns().filter(r=>!r.minted&&HASH_RE.test(String(r.tx||""))).slice(0,3);
+  if(!open.length){ el.innerHTML=""; if(FLIGHT_TIMER){clearInterval(FLIGHT_TIMER);FLIGHT_TIMER=null;} return; }
+  const rows=[];
+  for(const r of open){
+    const rs=r.src?srcByKey(r.src):SOURCES[0];
+    const srcDomain=r.dir==="in"?rs.domain:ARC_DOMAIN;
+    const chain=r.dir==="in"?rs.chainId:ARC_CHAIN_ID;
+    let status="checking",ready=false;
+    try{
+      const q=await fetch(IRIS+"/messages/"+srcDomain+"?transactionHash="+r.tx);
+      const d=await q.json(); const msgs=(d&&d.messages)||[];
+      const done=msgs.filter(m=>m.status==="complete"&&String(m.attestation||"").startsWith("0x"));
+      if(done.length){ status="ready"; ready=true; }
+      else if(msgs.length) status=msgs[0].status||"pending";
+      else status="indexing";
+    }catch(e){ status="offline"; }
+    const mins=minsSince(r.at);
+    const amt=usdc(BigInt(r.amount||"0"));
+    const way=r.dir==="in"?t("h_in"):t("h_out");
+    if(ready){
+      // While a withdrawal is running it is already collecting this very burn.
+      // Offering a second Claim button next to it invited pressing both, which
+      // spends gas twice on work the running flow is about to do.
+      rows.push('<div class="flight done">'
+        +'<svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>'
+        +'<div class="body"><b>'+amt+' USDC '+way+'</b> · '+t("fl_ready")
+        +'<div class="sub">'+(RUNNING?t("fl_auto"):txLink(r.tx,chain))+'</div></div>'
+        +(RUNNING?"":'<button class="act" data-claim="'+esc(r.tx)+'">'+t("rec_go")+'</button>')
+        +'</div>');
+    }else{
+      // Three tiers, because "taking a while" stops being reassuring after an
+      // hour and says nothing about what to do next.
+      const m=mins===null?0:mins;
+      const tier=m>120?2:(m>25?1:0);
+      const age=mins===null?"":" ("+(m>=60?Math.floor(m/60)+t("hour")+" "+(m%60):m)+t("min")+")";
+      rows.push('<div class="flight'+(tier?" stale":"")+'">'
+        +'<div class="spinner"></div>'
+        +'<div class="body"><b>'+amt+' USDC '+way+'</b> · '+t("fl_wait")+age
+        +'<div class="sub">'+t(tier===2?"fl_stuck":tier===1?"fl_slow":"fl_note")
+        +' '+txLink(r.tx,chain)+'</div></div></div>');
+    }
+  }
+  el.innerHTML=rows.join("");
+  el.querySelectorAll("[data-claim]").forEach(b=>b.onclick=()=>{
+    $("burntx").value=b.getAttribute("data-claim"); openM("m-recover"); recover(true);
+  });
+  if(!FLIGHT_TIMER) FLIGHT_TIMER=setInterval(()=>refreshInflight().catch(()=>{}),30000);
+}
+function updateRecBadge(){
+  const any=loadBurns().some(r=>!r.minted&&r.dir!=="in");
+  $("rec-badge").hidden=!any;
+  refreshInflight().catch(()=>{});
+}
+
+/* ============ progress ============ */
+function renderSteps(dir){
+  const li=(id,k,kn)=>'<li id="'+id+'"><span>'+t(k)+'</span><span class="note">'+t(kn)+'</span></li>';
+  $("steps").innerHTML=dir==="out"
+    ?li("st-guard","sg1","sg1n")+li("st-approve","sg2","sg2n")+li("st-burn","sg3","sg3n")
+      +li("st-attest","sg4","sg4n")+li("st-mint","sg5","sg5n")
+    :li("ds-approve","sg2","sg2n")+li("ds-burn","sg3","sg3n")+li("ds-mint","din3","din3n");
+  $("run-msg").innerHTML="";
+  $("prog").hidden=false;
+}
+function mark(id,cls,note){ const el=$(id); if(!el) return;
+  el.classList.remove("done","active","fail");
+  if(cls) el.classList.add(cls);
+  if(note!==undefined){ const n=el.querySelector(".note"); if(n) n.textContent=note; } }
+function say(m){ $("run-msg").innerHTML=m; }
+// A result must be unmissable. Plain grey text left the owner unsure whether a
+// deposit had worked, so every outcome now gets a coloured block.
+function banner(kind,html){ return '<div class="rbn '+kind+'">'+html+'</div>'; }
+/* Wallets and RPCs throw developer text ("execution reverted", "-32603",
+   "user rejected"). Showing that raw makes a normal cancel look like a crash,
+   so translate the cases people actually hit and keep the original underneath
+   for anyone who wants it. */
+function humanError(e){
+  const code=e&&(e.code!==undefined?e.code:(e.data&&e.data.code));
+  const raw=String((e&&e.message)||e||"");
+  const low=raw.toLowerCase();
+  let key=null;
+  if(code===4001||low.includes("user rejected")||low.includes("user denied")
+     ||low.includes("rejected the request")) key="err_rejected";
+  else if(low.includes("insufficient funds")||low.includes("insufficient balance")) key="err_gas";
+  else if(low.includes("chain")&&(low.includes("switch")||low.includes("unrecognized"))) key="err_chain";
+  else if(low.includes("nonce")) key="err_nonce";
+  else if(low.includes("rpc no answer")||low.includes("failed to fetch")
+          ||low.includes("networkerror")||low.includes("no receipt")) key="err_net";
+  else if(low.includes("execution reverted")||low.includes("reverted")) key="err_revert";
+  if(!key) return esc(raw);
+  const detail=raw&&raw.length<200?'<div class="sub" style="margin-top:6px">'+esc(raw)+'</div>':"";
+  return t(key)+detail;
+}
+function esc(s){ return String(s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+
+/* ============ exit: Arc -> Base ============ */
+async function burnOnce(amount,recipient){
+  const lane=await pickLane(ARC_DOMAIN,DST.domain,amount);
+  const data=SEL.depositForBurn+pad32(hexNum(amount))+pad32(hexNum(DST.domain))
+    +pad32(recipient)+pad32(ARC_USDC)+"".padStart(64,"0")
+    +pad32(hexNum(lane.maxFee))+pad32(hexNum(lane.finality));
+  return sendTx(TOKEN_MESSENGER,data,ARC_CHAIN_ID);
+}
+async function runExit(){
+  const amount=parseUsdc($("amount").value);
+  // Re-validate at send time rather than trusting what was typed earlier: the
+  // field could have been edited after the last render, and a mistyped
+  // recipient cannot be undone once the burn lands.
+  const recipient=(RECIP&&ADDR_RE.test(RECIP))?RECIP:ACCT;
+  RUNNING=true; updateCTA(); renderSteps("out");
+  try{
+    mark("st-guard","active","…");
+    const a=await checkAttesting();
+    if(!a.open){ mark("st-guard","fail","");
+      say('<span style="color:var(--bad)"><b>'+t("run_stop")+'</b> '+t("run_stop_d")+'</span>');
+      return; }
+    mark("st-guard","done",a.done+"/"+a.total);
+
+    // live per-message cap; split into pieces as needed
+    let lim=LIMIT_ARC;
+    try{ const l=numHex(await ethCall(TOKEN_MINTER,SEL.burnLimit+pad32(ARC_USDC)));
+      if(l>0n){ lim=l; LIMIT_ARC=l; } }catch(e){}
+
+    if(BATCH_CONTRACT){ await runExitBatch(amount,recipient,lim); return; }
+
+    // No batch contract needed to charge: take the fee as a plain transfer on
+    // Arc, exactly as the deposit side does. The contract only ever bought
+    // batching, never the ability to collect, and deploying it costs Arc gas
+    // we may not have yet. Fee first, so a failure here cannot burn funds the
+    // user was not charged for.
+    const exempt=await isFeeExempt(ACCT);
+    const bps=exempt?0n:BigInt(DEFAULT_FEE_BPS);
+    const principal=amount*10000n/(10000n+bps);
+    const svcFee=amount-principal;
+
+    let remaining=principal, pieces=[];
+    while(remaining>0n){ const p=remaining>lim?lim:remaining; pieces.push(p); remaining-=p; }
+
+    const burnHashes=[];
+    let batched=false;
+    // Ask the wallet to fold the whole exit into one confirmation. Only worth
+    // it past a single piece, and only if the wallet says it can do Arc.
+    if(pieces.length>1&&await walletBatchOK(ARC_HEX)){
+      try{
+        const laneB=await pickLane(ARC_DOMAIN,DST.domain,pieces[0]);
+        // A batch executes as one transaction, so it answers to the same 30M
+        // block gas limit as the contract route: ~45k per burn means about 400
+        // fits. Emptying a 679 USDC balance is 679 burns, which in a single
+        // batch would simply not fit in a block, so split it the same way.
+        const CHUNK=Number(BURNS_PER_CALL);
+        const groups=[];
+        for(let i=0;i<pieces.length;i+=CHUNK) groups.push(pieces.slice(i,i+CHUNK));
+        const burnCall=p=>({to:TOKEN_MESSENGER,
+          data:SEL.depositForBurn+pad32(hexNum(p))+pad32(hexNum(DST.domain))
+            +pad32(recipient)+pad32(ARC_USDC)+"".padStart(64,"0")
+            +pad32(hexNum(laneB.maxFee))+pad32(hexNum(laneB.finality))});
+        mark("st-approve","done","");
+        mark("st-burn","active",pieces.length+" → "+groups.length);
+        say(pieces.length+t("run_burns"));
+        await ensureChain(ARC_CHAIN_ID);
+        // Record each hash the instant the wallet names it, not after the batch
+        // confirms, so Recover can always reach the funds even if this session
+        // ends here.
+        const seen=[];
+        const keep=h=>{ if(seen.includes(h)) return;
+          seen.push(h); burnHashes.push(h);
+          saveBurn({tx:h,amount:principal.toString(),dir:"out",batch:true,
+            at:new Date().toISOString().slice(0,16)});
+          updateRecBadge(); };
+        for(let g=0;g<groups.length;g++){
+          const calls=[];
+          // Fee and allowance are set once, in the first batch; the allowance
+          // covers every group that follows.
+          if(g===0){
+            if(svcFee>0n) calls.push({to:ARC_USDC,
+              data:SEL.transfer+pad32(FEE_RECIPIENT)+pad32(hexNum(svcFee))});
+            calls.push({to:ARC_USDC,
+              data:SEL.approve+pad32(TOKEN_MESSENGER)+pad32(hexNum(principal))});
+          }
+          for(const p of groups[g]) calls.push(burnCall(p));
+          const id=await sendCalls(calls,ARC_HEX);
+          // Past this line the calls are with the wallet. Retrying the
+          // sequential path now could burn the same funds twice, so failures
+          // must surface instead of falling through.
+          batched=true;
+          await waitCalls(id,null,keep);
+          mark("st-burn","active",(g+1)+" / "+groups.length);
+        }
+        mark("st-burn","done","");
+      }catch(e){
+        if(batched) throw e;
+        batched=false;   // wallet refused before submitting; sign them one by one
+      }
+    }
+
+    if(!batched){
+      if(svcFee>0n){
+        mark("st-approve","active",t("dep_fee_step"));
+        const ftx=await sendTx(ARC_USDC,SEL.transfer+pad32(FEE_RECIPIENT)+pad32(hexNum(svcFee)),ARC_CHAIN_ID);
+        await waitReceipt(ftx,ARC_CHAIN_ID);
+      }
+      mark("st-approve","active",t("sg2n"));
+      const cur=numHex(await ethCall(ARC_USDC,SEL.allowance+pad32(ACCT)+pad32(TOKEN_MESSENGER)));
+      if(cur<principal){
+        const tx=await sendTx(ARC_USDC,SEL.approve+pad32(TOKEN_MESSENGER)+pad32(hexNum(principal)),ARC_CHAIN_ID);
+        await waitReceipt(tx,ARC_CHAIN_ID);
+      }
+      mark("st-approve","done","");
+
+      mark("st-burn","active","0 / "+pieces.length);
+      say(pieces.length+t("run_burns"));
+      for(let i=0;i<pieces.length;i++){
+        const bh=await burnOnce(pieces[i],recipient);
+        burnHashes.push(bh);
+        saveBurn({tx:bh,amount:pieces[i].toString(),dir:"out",at:new Date().toISOString().slice(0,16)});
+        await waitReceipt(bh,ARC_CHAIN_ID);
+        mark("st-burn","active",(i+1)+" / "+pieces.length);
+      }
+      mark("st-burn","done","");
+    }
+    updateRecBadge();
+
+    const {redeemed,expected}=await collectAll(burnHashes);
+    const want=expected||pieces.length;
+    if(redeemed===want) mark("st-mint","done","");
+    say(banner(redeemed===want?"ok":"warn",
+      '<b>'+(redeemed===want?t("ex_ok_t"):t("run_done"))+'</b><br>'
+      +redeemed+"/"+want+t("run_arrived")));
+    updateRecBadge();
+    await refreshBalances();
+  }catch(e){ say(banner("bad",'<b>'+t("failed_t")+'</b><br>'+humanError(e))); }
+  finally{ RUNNING=false; updateCTA(); }
+}
+
+/* Batch route: the contract loops many burns inside one transaction and pulls
+   principal + the service fee in the same call, so a $500 exit is 2 signatures
+   (approve + batchExit) instead of ~1000. Called from inside runExit's
+   try/finally, so RUNNING is released by the caller. */
+async function runExitBatch(amount,recipient,cap){
+  // The rate is read from the contract rather than hardcoded, because it can
+  // be retuned on-chain; a stale copy here would misquote the user.
+  const bps=await liveFeeBps();
+  const D=10000n+BigInt(bps);
+  // The user enters what leaves their balance, and the contract adds the fee
+  // on top of principal, so principal = amount / (1 + rate).
+  const P=amount*10000n/D;
+  if(P<1n){ say('<span style="color:var(--bad)">'+t("cta_amount")+'</span>'); return; }
+  let full=P/cap; const rem=P%cap;
+  const calls=[];
+  while(full>0n){ const n=full>BURNS_PER_CALL?BURNS_PER_CALL:full;
+    calls.push({burns:n,each:cap}); full-=n; }
+  if(rem>0n) calls.push({burns:1n,each:rem});
+  if(!calls.length) calls.push({burns:1n,each:P});
+  const grand=calls.reduce((s,c)=>{const p=c.burns*c.each;
+    return s+p+p*BigInt(bps)/10000n;},0n);
+
+  mark("st-approve","active",t("sg2n"));
+  const curA=numHex(await ethCall(ARC_USDC,SEL.allowance+pad32(ACCT)+pad32(BATCH_CONTRACT)));
+  if(curA<grand){
+    const tx=await sendTx(ARC_USDC,SEL.approve+pad32(BATCH_CONTRACT)+pad32(hexNum(grand)),ARC_CHAIN_ID);
+    await waitReceipt(tx,ARC_CHAIN_ID);
+  }
+  mark("st-approve","done","");
+
+  // Base balance before any burn, so relay arrival can be measured honestly.
+  let before=0n;
+  try{ before=numHex(await dstCall(DST.usdc,SEL.balanceOf+pad32(recipient))); }catch(e){}
+
+  mark("st-burn","active","0 / "+calls.length);
+  const laneOut=await pickLane(ARC_DOMAIN,DST.domain,cap);
+  const burnHashes=[];
+  for(let i=0;i<calls.length;i++){
+    const c=calls[i];
+    // Pass the rate we quoted as the ceiling we accept, so a rate change
+    // landing between our quote and this transaction reverts instead of
+    // silently charging more.
+    const data=SEL.batchExit+pad32(hexNum(c.burns))+pad32(hexNum(c.each))
+      +pad32(hexNum(DST.domain))+pad32(recipient)
+      +pad32(hexNum(laneOut.maxFee))+pad32(hexNum(laneOut.finality))
+      +pad32(hexNum(bps));
+    const bh=await sendTx(BATCH_CONTRACT,data,ARC_CHAIN_ID,Number(c.burns)*60000+500000);
+    burnHashes.push(bh);
+    saveBurn({tx:bh,amount:(c.burns*c.each).toString(),dir:"out",batch:true,
+      at:new Date().toISOString().slice(0,16)});
+    await waitReceipt(bh,ARC_CHAIN_ID);
+    mark("st-burn","active",(i+1)+" / "+calls.length);
+  }
+  mark("st-burn","done","");
+  updateRecBadge();
+
+  // Collect here rather than waiting on Circle's relayer. It serves
+  // app-mediated transfers and does not pick up these burns, so waiting only
+  // ended in the user pressing Recover and signing once per message.
+  const {redeemed,expected}=await collectAll(burnHashes);
+  const want=expected||Number(P/cap)+1;
+  if(redeemed>=want&&want>0){
+    mark("st-mint","done","");
+    const got=numHex(await dstCall(DST.usdc,SEL.balanceOf+pad32(recipient)))-before;
+    say(banner("ok",'<b>'+t("ex_ok_t")+'</b><br>'
+      +usdc(got>0n?got:P)+" USDC "+t("ex_ok_b")));
+  }else{
+    mark("st-mint","fail","");
+    say(banner("warn",'<b>'+t("dep_slow_t")+'</b><br>'+redeemed+"/"+want+t("run_arrived")+'<br>'
+      +burnHashes.map(h=>txLink(h,ARC_CHAIN_ID)).join(" ")));
+  }
+  updateRecBadge();
+  await refreshBalances();
+}
+
+/* ============ deposit: any CCTP chain -> Arc ============
+   The service fee is charged here as an ordinary transfer on the source chain
+   rather than through a contract. Inbound has no per-message cap to work
+   around, so a contract would buy nothing but a deployment on every source
+   chain we support, each needing its own gas. The user signs one extra
+   transfer instead, and the amount they typed is what leaves their balance. */
+async function runDeposit(){
+  const typed=parseUsdc($("amount").value);
+  // An exempt wallet bridges the whole amount, so principal is not reduced.
+  const exempt=await isFeeExempt(ACCT);
+  const bps=exempt?0n:BigInt(DEPOSIT_FEE_BPS);
+  const principal=typed*10000n/(10000n+bps);
+  const fee=typed-principal;
+  const amount=principal;
+  RUNNING=true; updateCTA(); renderSteps("in");
+  try{
+    if(amount<=0n){ say('<span style="color:var(--bad)">'+t("cta_amount")+'</span>'); return; }
+    // Inbound caps sit far above anything a user sends, but read it anyway.
+    try{ const lim=numHex(await srcCall(TOKEN_MINTER,SEL.burnLimit+pad32(SRC.usdc)));
+      if(lim>0n&&amount>lim){
+        say('<span style="color:var(--bad)">'+t("over_cap")+usdc(lim)+' USDC</span>'); return; }
+    }catch(e){}
+
+    if(fee>0n&&!(await isFeeExempt(ACCT))){
+      mark("ds-approve","active",t("dep_fee_step"));
+      const ftx=await sendTx(SRC.usdc,SEL.transfer+pad32(FEE_RECIPIENT)+pad32(hexNum(fee)),SRC.chainId);
+      await waitReceipt(ftx,SRC.chainId);
+    }
+
+    mark("ds-approve","active",t("sg2n"));
+    const cur=numHex(await srcCall(SRC.usdc,SEL.allowance+pad32(ACCT)+pad32(TOKEN_MESSENGER)));
+    if(cur<amount){
+      const tx=await sendTx(SRC.usdc,SEL.approve+pad32(TOKEN_MESSENGER)+pad32(hexNum(amount)),SRC.chainId);
+      await waitReceipt(tx,SRC.chainId);
+    }
+    mark("ds-approve","done","");
+
+    mark("ds-burn","active","");
+    // Base->Arc costs a small Circle fee; allow enough headroom that the
+    // message can actually be executed, and tell the user the ceiling.
+    // The discovery that made deposits deliverable: Circle's relayer only
+    // picks up messages tagged with hookData "cctp-forward". Decoded from the
+    // DepositForBurn events of transfers that actually arrived; plain
+    // depositForBurn without the tag sat unserved for hours. The fee ceiling
+    // is kept tight (~just above the observed 0.0172 charge) because the tag
+    // ecosystem pays exact quotes, not generous ceilings.
+    const lane=await pickLane(SRC.domain,ARC_DOMAIN,amount);
+    const hook=strip(HOOK_TAG);
+    const maxFee=lane.free?0n:FWD_MAX_FEE;
+    const data=SEL.depositForBurnWithHook+pad32(hexNum(amount))+pad32(hexNum(ARC_DOMAIN))
+      +pad32(ACCT)+pad32(SRC.usdc)+"".padStart(64,"0")
+      +pad32(hexNum(maxFee))+pad32(hexNum(lane.finality))
+      +pad32(hexNum(256))                          // offset of hookData (8 words)
+      // Delivered transfers carry the tag as a 32-byte value, zero padded,
+      // not a 12-byte string. Mimic them byte for byte.
+      +pad32(hexNum(32))
+      +hook.padEnd(64,"0");
+    const burnTx=await sendTx(TOKEN_MESSENGER,data,SRC.chainId);
+    saveBurn({tx:burnTx,amount:amount.toString(),dir:"in",src:SRC.key,
+      at:new Date().toISOString().slice(0,16)});
+    say(t("run_hash")+txLink(burnTx,SRC.chainId));
+    await waitReceipt(burnTx,SRC.chainId);
+    mark("ds-burn","done","");
+
+    mark("ds-mint","active",t("sg4n"));
+    // Base needs its own finality before Circle will sign, which really does
+    // take ~15 minutes. Say that out loud with a live clock, or the wait looks
+    // like a failure.
+    const t0=Date.now();
+    const msg=await pollAttestation(burnTx,SRC.domain,(s,i)=>{
+      const el=Math.round((Date.now()-t0)/1000);
+      mark("ds-mint","active",Math.floor(el/60)+"분 "+(el%60)+"초");
+      say(banner("wait",t("dep_waiting")+" "+Math.floor(el/60)+t("min")
+        +"<br>"+t("dep_wait_note")+"<br>"+txLink(burnTx,SRC.chainId)));
+    });
+    if(!msg){ mark("ds-mint","fail","");
+      say(banner("warn",'<b>'+t("dep_slow_t")+'</b><br>'+t("dep_slow_b")
+        +'<br>'+txLink(burnTx,SRC.chainId))); return; }
+
+    // Once Circle has signed, the mint can be submitted by anyone. A relayer
+    // usually does it, which matters because a first-time depositor has no Arc
+    // gas and physically cannot submit it themselves. So wait for the relayer,
+    // and only offer to self-submit when the wallet can actually pay for it.
+    const before=numHex(await ethCall(ARC_USDC,SEL.balanceOf+pad32(ACCT)));
+    let landed=false;
+    for(let i=0;i<24&&!landed;i++){
+      say(banner("wait",t("run_wait_relay")+" ("+(i*5)+"s)<br>"+txLink(burnTx,SRC.chainId)));
+      await new Promise(r=>setTimeout(r,5000));
+      try{ const now=numHex(await ethCall(ARC_USDC,SEL.balanceOf+pad32(ACCT)));
+        if(now>before) landed=true; }catch(e){}
+    }
+    if(landed){ mark("ds-mint","done","");
+      markMinted(burnTx);
+      say(banner("ok",'<b>'+t("dep_ok_t")+'</b><br>'+usdc(amount)+" USDC "+t("dep_ok_b")));
+    }else{
+      let gas=0n;
+      try{ gas=numHex(await rpcRead("eth_getBalance",[ACCT,"latest"])); }catch(e){}
+      if(gas<2000000000000000n){          // under ~0.002 USDC of Arc gas
+        // Not a failure: the money is signed for and waiting. Say what is
+        // actually true rather than letting a gas error surface.
+        mark("ds-mint","active","");
+        say(banner("warn",'<b>'+t("dep_relay_t")+'</b><br>'+t("dep_relay_b")
+          +'<br>'+txLink(burnTx,SRC.chainId)));
+        return;
+      }
+      mark("ds-mint","active",t("run_self"));
+      const md=SEL.receiveMessage+encodeTwoBytes(msg.message,msg.attestation);
+      const mt=await sendTx(TRANSMITTER,md,ARC_CHAIN_ID);
+      await waitReceipt(mt,ARC_CHAIN_ID);
+      markMinted(burnTx); mark("ds-mint","done","");
+      say(banner("ok",'<b>'+t("dep_ok_t")+'</b><br>'+usdc(amount)+" USDC "+t("dep_ok_b")
+        +"<br>"+txLink(mt,ARC_CHAIN_ID)));
+    }
+    await refreshBalances();
+  }catch(e){ say(banner("bad",'<b>'+t("failed_t")+'</b><br>'+humanError(e))); }
+  finally{ RUNNING=false; updateCTA(); }
+}
+
+/* ============ collect on the destination ============ */
+/* Every burn has to be redeemed on the destination with its own receiveMessage.
+   Leaving that to Circle's relayer was wrong: the relayer serves app-mediated
+   transfers and does not pick up raw burns, so the page waited, gave up, and
+   left the user to press Recover and then sign once per message. A 600 USDC
+   exit meant 600 confirmations.
+   So collect here, and fold the calls into as few batches as the destination
+   block can carry. Anything already delivered is skipped by nonce, so this is
+   safe to run even when the relayer did show up. */
+const MINT_GAS=160000n;
+async function mintGroups(msgs){
+  let per=40;                       // conservative default if the read fails
+  try{
+    const blk=await dstRead("eth_getBlockByNumber",["latest",false]);
+    const gl=numHex(blk.gasLimit);
+    // Half a block, so a batch still lands when the chain is busy.
+    if(gl>0n) per=Math.max(1,Math.min(msgs.length,Number(gl/2n/MINT_GAS)));
+  }catch(e){}
+  const out=[];
+  for(let i=0;i<msgs.length;i+=per) out.push(msgs.slice(i,i+per));
+  return out;
+}
+/* Send every receiveMessage, adapting when the wallet says no.
+   A wallet can advertise atomic batching and still reject the batch it is
+   handed - OKX returned status 400 on a 100-call batch. Throwing there stranded
+   the user with a dead button. Unlike burning, minting is safe to retry: the
+   transmitter rejects a nonce that was already used, and a rejected batch never
+   executed at all. So shrink the batch and try again, and fall to one at a time
+   only as the last resort. */
+/* How many calls this wallet will actually accept in one batch. The block gas
+   limit says 2,500 on Base; the wallet said 400 at 100. Wallet limits are not
+   published and differ by vendor, so start at something conservative, keep what
+   worked, and never start from the gas ceiling again. */
+/* Start big. A refused batch (status 400) never reaches the chain and costs
+   nothing but a few seconds, so there is no reason to be timid on the first
+   try: if the wallet takes 100 the whole claim is one signature. A batch that
+   executed and reverted (500) did burn gas, so that one steps down harder. */
+const MINT_BATCH_DEFAULT=100;
+/* Collecting through a contract instead of the wallet's batch API. The wallet
+   route is capped at an undocumented size the wallet refuses past, so a large
+   withdrawal became many confirmations. This contract loops receiveMessage
+   itself: one signature, bounded only by the block. It holds nothing, approves
+   nothing and cannot redirect a transfer - funds go to the mintRecipient sealed
+   inside each attested message. Deployed on Base. */
+const CLAIM_CONTRACT="0x174a6cf1382a2e496dbc642461711b59e5d4e0b7";
+let CLAIM_LAST_ERROR="";
+const SEL_CLAIM="0xf415c5e5";   // claim(bytes[],bytes[])
+// A dynamic bytes element: its length, then the data padded to a 32-byte boundary.
+function abiBytes(x){
+  const b=strip(x), len=b.length/2;
+  return pad32(hexNum(len))+b+"0".repeat(((32-(len%32))%32)*2);
+}
+// bytes[]: the count, then one offset per element (measured from just past the
+// count), then the elements themselves.
+function abiBytesArray(arr){
+  const items=arr.map(abiBytes);
+  let off=32*arr.length;
+  const offs=items.map(it=>{ const o=off; off+=it.length/2; return pad32(hexNum(o)); });
+  return pad32(hexNum(arr.length))+offs.join("")+items.join("");
+}
+function encodeClaim(msgs){
+  const A=abiBytesArray(msgs.map(m=>m.message));
+  const B=abiBytesArray(msgs.map(m=>m.attestation));
+  const head=64;                       // two offsets, both parameters dynamic
+  return SEL_CLAIM+pad32(hexNum(head))+pad32(hexNum(head+A.length/2))+A+B;
+}
+// Cached for the synchronous details render; refreshed alongside the status.
+let CLAIM_PER_CALL=200;
+// How many messages one claim() call can carry on this chain.
+async function claimPerCall(){
+  try{
+    const blk=await dstRead("eth_getBlockByNumber",["latest",false]);
+    const gl=numHex(blk.gasLimit);
+    if(gl>0n) return Math.max(1,Number(gl/2n/MINT_GAS));
+  }catch(e){}
+  return 200;
+}
+function batchHint(chainId){
+  try{ const v=Number(localStorage.getItem("arcMintBatch:"+chainId));
+    if(v>=1) return v; }catch(e){}
+  return MINT_BATCH_DEFAULT;
+}
+function rememberBatch(chainId,n){
+  try{ localStorage.setItem("arcMintBatch:"+chainId,String(Math.max(1,n))); }catch(e){}
+}
+// What the user is about to be asked to sign, before they press anything.
+async function mintSignatures(count,chainId){
+  if(count<1) return 0;
+  if(count===1) return 1;
+  let per=1;
+  if(CLAIM_CONTRACT&&chainId===BASE_CHAIN_ID){ per=await claimPerCall(); }
+  else{ try{ if(await walletBatchOK(hexNum(chainId))) per=batchHint(chainId); }catch(e){} }
+  return Math.ceil(count/Math.max(1,per));
+}
+async function mintAll(msgs,chainId,onProg){
+  const dstHex=hexNum(chainId);
+  const data=m=>SEL.receiveMessage+encodeTwoBytes(m.message,m.attestation);
+  const total=msgs.length;
+
+  // Preferred route: one ordinary transaction that loops inside the contract.
+  // No wallet batching, so no undocumented wallet ceiling to run into.
+  if(CLAIM_CONTRACT&&chainId===BASE_CHAIN_ID&&total>1){
+    try{
+      const per=Math.min(total,await claimPerCall());
+      let sent=0;
+      for(let i=0;i<msgs.length;i+=per){
+        const grp=msgs.slice(i,i+per);
+        onProg&&onProg("wallet",sent,total,grp.length);
+        const tx=await sendTx(CLAIM_CONTRACT,encodeClaim(grp),chainId,grp.length*180000+120000);
+        await waitReceipt(tx,chainId);
+        sent+=grp.length;
+        onProg&&onProg("sending",sent,total,per);
+      }
+      return sent;
+    }catch(e){
+      // Still fall through rather than stranding the claim, but say why. A
+      // silent fallback here is what hid a broken contract call behind a pile
+      // of wallet confirmations for hours.
+      CLAIM_LAST_ERROR=String((e&&e.message)||e).slice(0,160);
+      try{ console.warn("claim contract failed, falling back:",CLAIM_LAST_ERROR); }catch(_){}
+      onProg&&onProg("fallback",0,total,1);
+    }
+  }
+
+  let done=0, queue=msgs.slice(), per=1;
+  if(total>1&&await walletBatchOK(dstHex)){
+    try{
+      await ensureChain(chainId);
+      // Bounded by what the chain can carry AND by what this wallet has proven
+      // it will take.
+      const byGas=(await mintGroups(queue))[0].length;
+      per=Math.max(1,Math.min(byGas,batchHint(chainId)));
+    }catch(e){ per=1; }
+  }
+  while(queue.length){
+    if(per>1){
+      const grp=queue.slice(0,per);
+      try{
+        onProg&&onProg("wallet",done,total,grp.length);
+        const id=await sendCalls(grp.map(m=>({to:TRANSMITTER,data:data(m)})),dstHex);
+        onProg&&onProg("sending",done,total,grp.length);
+        await waitCalls(id);
+        queue=queue.slice(per); done+=grp.length;
+        rememberBatch(chainId,per);   // this size works on this wallet
+        onProg&&onProg("sending",done,total,per);
+        continue;
+      }catch(e){
+        // A refusal cost nothing, so step down gently and keep the useful size.
+        // A revert already spent gas, so drop straight to one at a time rather
+        // than paying for another failed attempt.
+        per=(e&&e.free===false)?1:(per>8?Math.floor(per/4):1);
+        rememberBatch(chainId,per);   // where to start next time
+        onProg&&onProg("smaller",done,total,per);
+        continue;
+      }
+    }
+    onProg&&onProg("wallet",done,total,1);
+    const tx=await sendTx(TRANSMITTER,data(queue[0]),chainId);
+    await waitReceipt(tx,chainId);
+    queue=queue.slice(1); done++;
+    onProg&&onProg("sending",done,total,1);
+  }
+  return done;
+}
+async function collectAll(burnHashes){
+  let redeemed=0, expected=0;
+  const toMint=[];
+  mark("st-attest","active",t("sg4n"));
+  for(const bh of burnHashes){
+    const msgs=await pollAttestationAll(bh,ARC_DOMAIN,
+      (s,i)=>mark("st-attest","active",s+" "+(i*15)+"s"));
+    if(!msgs.length){ say(t("run_delay")+txLink(bh,ARC_CHAIN_ID)); continue; }
+    expected+=msgs.length;
+    for(const msg of msgs){
+      // The relayer may have delivered this one already; submitting twice
+      // reverts, so check the nonce before spending gas on it.
+      const n=msgNonce(msg);
+      if(n){ try{ if(numHex(await dstCall(TRANSMITTER,SEL.usedNonces+pad32(n)))>0n){
+        redeemed++; continue; } }catch(e){} }
+      toMint.push(msg);
+    }
+    markMinted(bh);
+  }
+  mark("st-attest","done","");
+  if(!toMint.length) return {redeemed,expected};
+
+  mark("st-mint","active",t("sg5n"));
+  redeemed+=await mintAll(toMint,DST.chainId,
+    (phase,done,total)=>mark("st-mint","active",done+" / "+total));
+  return {redeemed,expected};
+}
+
+/* ============ account delegation (EIP-7702) ============ */
+/* A delegated EOA carries 0xef0100 followed by the 20-byte delegate address, so
+   the state is readable from any node and does not have to be taken on trust
+   from the wallet UI. Revoking is a wallet-side action that no page can perform,
+   but confirming that it actually happened is exactly what this is for. */
+const KNOWN_DELEGATES={
+  // Published in okxlabs/okx-smart-wallet-evm with audits; deployed on Ethereum,
+  // X Layer, Base, Optimism, Arbitrum, BSC and Polygon. Notably NOT on Arc.
+  "0xe40ccb2d94975c51bff0c004efdfd9b3a5796fa4":"deleg_known"
+};
+function delegChains(){
+  const list=[{name:"Arc",rpcs:ARC_RPCS}];
+  for(const s of SOURCES) list.push({name:s.name,rpcs:s.rpcs});
+  return list;
+}
+// Each scan is many awaited round trips, so a second one started while the
+// first is still walking chains would append its rows alongside them. Only the
+// newest scan is allowed to write.
+let DELEG_SCAN=0;
+async function scanDelegation(){
+  if(!ACCT){ $("deleg-msg").textContent=t("deleg_conn"); return; }
+  const my=++DELEG_SCAN;
+  $("deleg-msg").textContent="…";
+  $("deleg-list").innerHTML="";
+  let anyDelegated=false;
+  // Collect first and paint once. Writing rows as they arrive lets a superseded
+  // scan land a row between awaits, which showed up as duplicate chains.
+  const rows=[];
+  for(const c of delegChains()){
+    if(my!==DELEG_SCAN) return;
+    let code=null;
+    try{ code=await rpcVia(c.rpcs,"eth_getCode",[ACCT,"latest"]); }catch(e){}
+    let right,cls="",note="";
+    if(code===null||code===undefined){ right="?"; }
+    else if(code==="0x"){ right=t("deleg_none"); cls="ok"; }
+    else{
+      const s=code.toLowerCase();
+      if(s.startsWith("0xef0100")){
+        anyDelegated=true;
+        const to="0x"+s.slice(8,48);
+        const key=KNOWN_DELEGATES[to];
+        // A delegate with no code is not a drain risk, but nothing works
+        // through it either, so say that rather than calling it fine.
+        note=key?t(key):t("deleg_unknown");
+        try{ const dc=await rpcVia(c.rpcs,"eth_getCode",[to,"latest"]);
+          if(dc==="0x") note=t("deleg_nocode"); }catch(e){}
+        right=t("deleg_yes")+" · "+short(to);
+        cls=key?"warn":"bad";
+      }else{ right="contract account"; cls="warn"; }
+    }
+    rows.push('<div class="hrow"><span class="l">'+esc(c.name)
+      +(note?'<span class="sub" style="display:block">'+esc(note)+'</span>':"")
+      +'</span><span class="pill '+cls+'">'+esc(right)+'</span></div>');
+  }
+  if(my!==DELEG_SCAN) return;
+  $("deleg-list").innerHTML=rows.join("");
+  $("deleg-msg").textContent=anyDelegated?t("deleg_how"):"";
+}
+
+/* ============ recover ============ */
+/* One burn tx from the batch contract carries MANY messages (up to 600 user
+   pieces plus the fee pieces), so recovery walks every message in the tx,
+   skips the ones already minted (usedNonces on the destination transmitter),
+   and submits the rest. Also correct for plain single-message txs. */
+function msgNonce(m){
+  // v2 message header: version(4) srcDomain(4) dstDomain(4) nonce(32)
+  const b=strip(m.message||"");
+  return b.length>=88?"0x"+b.slice(24,88):null;
+}
+async function recover(mintIt){
+  const tx=$("burntx").value.trim();
+  if(!/^0x[0-9a-fA-F]{64}$/.test(tx)){ $("rec-msg").textContent="0x… 64 hex"; return; }
+  $("rec-msg").textContent="…";
+  try{
+    const r=await fetch(IRIS+"/messages/"+ARC_DOMAIN+"?transactionHash="+tx);
+    const d=await r.json(); const msgs=(d&&d.messages)||[];
+    if(!msgs.length){ $("rec-msg").textContent=t("rec_norec"); return; }
+    const complete=msgs.filter(m=>m.status==="complete"&&String(m.attestation||"").startsWith("0x"));
+    if(!complete.length){ $("rec-msg").textContent="status: "+(msgs[0].status||"?"); return; }
+    // Which of the attested messages still need a mint?
+    const todo=[];
+    let minted=0;
+    for(const m of complete){
+      const n=msgNonce(m);
+      let used=false;
+      if(n){ try{ used=numHex(await baseCall(TRANSMITTER,SEL.usedNonces+pad32(n)))>0n; }catch(e){} }
+      if(used) minted++; else todo.push(m);
+    }
+    if(!mintIt){
+      $("rec-msg").innerHTML='<span class="pill ok">'+t("rec_attested")+'</span> '
+        +minted+"/"+complete.length+(todo.length?'  <span class="pill warn">'+todo.length+' '+t("h_unclaimed")+'</span>':"");
+      if(!todo.length&&complete.length===msgs.length){ markMinted(tx); updateRecBadge(); }
+      return;
+    }
+    if(!todo.length){
+      markMinted(tx); updateRecBadge();
+      $("rec-msg").innerHTML='<span style="color:var(--ok)"><b>'+t("rec_done")+'</b></span> '
+        +minted+"/"+complete.length;
+      return;
+    }
+    if(!ACCT){ await connectFlow(); if(!ACCT) return; }
+    let done=0;
+    const mintData=m=>SEL.receiveMessage+encodeTwoBytes(m.message,m.attestation);
+    // One batch tx can carry hundreds of these, and a batched burn produces
+    // hundreds. Signing them one by one is what made recovering a large exit
+    // unusable.
+    let batched=false;
+    const dstHex=hexNum(BASE_CHAIN_ID);
+    if(todo.length>1&&await walletBatchOK(dstHex)){
+      try{
+        await ensureChain(BASE_CHAIN_ID);
+        const groups=await mintGroups(todo);
+        for(let g=0;g<groups.length;g++){
+          const id=await sendCalls(groups[g].map(m=>({to:TRANSMITTER,data:mintData(m)})),dstHex);
+          batched=true;
+          await waitCalls(id);
+          done+=groups[g].length;
+          $("rec-msg").textContent=done+"/"+todo.length;
+        }
+      }catch(e){ if(batched) throw e; batched=false; }
+    }
+    if(!batched) for(const m of todo){
+      const mt=await sendTx(TRANSMITTER,mintData(m),BASE_CHAIN_ID);
+      await waitReceipt(mt,BASE_CHAIN_ID);
+      done++; $("rec-msg").innerHTML=txLink(mt,BASE_CHAIN_ID)+' '+done+"/"+todo.length;
+    }
+    if(done===todo.length&&complete.length===msgs.length){ markMinted(tx); }
+    updateRecBadge();
+    $("rec-msg").innerHTML='<span style="color:var(--ok)"><b>'+t("rec_done")+'</b></span> '
+      +(minted+done)+"/"+complete.length;
+  // Scroll the outcome into view: under a long pending list the result line is
+  // off screen, and a press that reported an error looked like a dead button.
+  }catch(e){ recSay(humanError(e)); }
+}
+/* The scan walks 140,000 blocks and then asks Circle about each burn it found,
+   which takes a while. Showing only "…" for all of it made a working search look
+   like a dead button, so report which stage it is on and how far along. */
+function recProg(html){ $("rec-prog").innerHTML=html||""; }
+async function detectPending(){
+  if(!ACCT){ recProg(t("rec_conn2")); return; }
+  $("pending").innerHTML=""; $("rec-msg").innerHTML="";
+  const WINDOWS=14;
+  recProg(t("rec_scan1")+" 0/"+WINDOWS);
+  const head=Number(numHex(await rpcRead("eth_blockNumber",[])));
+  // depositor is an indexed field on DepositForBurn, so the node can filter to
+  // this wallet instead of the page pulling every burn on the chain and asking
+  // for each transaction one at a time. That was ~66 extra round trips per
+  // window and put the whole scan around six minutes.
+  const mine=[]; let frm=head;
+  const topicsFor=who=>[TOPIC_DEPOSIT_BURN,null,"0x"+pad32(who)];
+  for(let w=0;w<WINDOWS;w++){ const a=Math.max(0,frm-9999);
+    const range={fromBlock:hexNum(a),toBlock:hexNum(frm)};
+    // Burns this wallet signed directly.
+    try{ const logs=await rpcRead("eth_getLogs",[{...range,topics:topicsFor(ACCT)}]);
+      for(const lg of (logs||[])) if(!mine.includes(lg.transactionHash)) mine.push(lg.transactionHash);
+    }catch(e){}
+    // Burns the batch contract made. The depositor there is the contract, so
+    // these still need the sender checked - but there are few of them.
+    if(BATCH_CONTRACT){
+      try{ const logs=await rpcRead("eth_getLogs",[{...range,topics:topicsFor(BATCH_CONTRACT)}]);
+        const seen=new Set();
+        for(const lg of (logs||[])){
+          if(seen.has(lg.transactionHash)||mine.includes(lg.transactionHash)) continue;
+          seen.add(lg.transactionHash);
+          try{ const tx=await rpcRead("eth_getTransactionByHash",[lg.transactionHash]);
+            if(tx&&tx.from&&tx.from.toLowerCase()===ACCT.toLowerCase()) mine.push(lg.transactionHash);
+          }catch(e){}
+        }
+      }catch(e){}
+    }
+    frm=a-1;
+    recProg(t("rec_scan1")+" "+(w+1)+"/"+WINDOWS+" · "+mine.length+t("rec_found"));
+  }
+  // Ask Circle about several burns at once; one at a time made 37 transactions
+  // take the better part of a minute with nothing on screen.
+  // "Attested" is not "still owed". Listing every attested burn showed 37 rows
+  // when none of them had anything left to collect, and sent the claim button
+  // through work with nothing to do. Check the nonce on the destination and
+  // keep only what is genuinely outstanding.
+  const pending=[];
+  let asked=0;
+  for(let i=0;i<mine.length;i+=6){
+    const slice=mine.slice(i,i+6);
+    await Promise.all(slice.map(async tx=>{
+      try{
+        const r=await fetch(IRIS+"/messages/"+ARC_DOMAIN+"?transactionHash="+tx);
+        const d=await r.json();
+        const done=((d&&d.messages)||[]).filter(m=>m.status==="complete"
+          &&String(m.attestation||"").startsWith("0x"));
+        const used=await Promise.all(done.map(async m=>{
+          const n=msgNonce(m);
+          if(!n) return false;
+          try{ return numHex(await baseCall(TRANSMITTER,SEL.usedNonces+pad32(n)))>0n; }
+          catch(e){ return false; }
+        }));
+        if(used.some(u=>!u)) pending.push(tx);
+        else if(done.length) markMinted(tx);
+      }catch(e){}
+      asked++; recProg(t("rec_scan2")+" "+asked+"/"+mine.length);
+    }));
+  }
+  const uniq=[...new Set(pending)];
+  recProg("");
+  if(!uniq.length){ $("pending").textContent=t("rec_none"); return; }
+  // Say how many wallet confirmations this will cost before they commit to it.
+  // A button that silently turns into four popups is how people get scared off
+  // halfway through a withdrawal.
+  let msgCount=0;
+  for(const tx of uniq){
+    try{ const r=await fetch(IRIS+"/messages/"+ARC_DOMAIN+"?transactionHash="+tx);
+      const d=await r.json();
+      msgCount+=((d&&d.messages)||[]).filter(m=>m.status==="complete").length;
+    }catch(e){}
+  }
+  const sigs=await mintSignatures(msgCount,BASE_CHAIN_ID);
+  $("pending").innerHTML="<b>"+t("rec_pending")+"</b>"
+    +'<div class="mnote" style="margin-top:6px">'+msgCount+t("rec_pieces")
+    +' · <b>'+t("sig_about")+" "+sigs+t("sig_times")+'</b></div>'
+    +'<button class="sbtn primary" id="rec-all" style="width:100%;margin-top:8px">'
+    +t("rec_all")+" ("+uniq.length+")</button>"
+    +uniq.map(tx=>
+    '<div class="hrow" style="margin-top:8px">'+txLink(tx,ARC_CHAIN_ID)
+    +'<button class="sbtn" style="flex:0 0 auto;white-space:nowrap;padding:5px 12px" data-redeem="'+tx+'">'+t("rec_go")+'</button></div>').join("");
+  document.querySelectorAll("[data-redeem]").forEach(b=>
+    b.onclick=()=>{ $("burntx").value=b.getAttribute("data-redeem"); recover(true); });
+  $("rec-all").onclick=()=>recoverAll(uniq);
+}
+/* Claiming one burn tx at a time is the thing that made a large exit unusable:
+   a dozen rows meant a dozen presses and a dozen confirmations, and the result
+   line sits below a long list where it is easy to miss. Gather every attested
+   message across every pending transaction and send them together. */
+// The manual single-hash flow reports here, directly under its own input.
+function recSay(html){ $("rec-msg").innerHTML=html; }
+/* Claim-all reports into rec-prog instead, which sits above the list. Writing
+   below a 37-row list meant the page jumped to the bottom on every update and
+   the button looked like it did nothing. */
+async function recoverAll(txs){
+  if(!txs||!txs.length){ recProg(t("rec_none")); return; }
+  if(!ACCT){ await connectFlow(); if(!ACCT) return; }
+  // The button itself has to show it was pressed. A bare counter under an
+  // unchanged button reads as nothing happening.
+  const btn=$("rec-all"), label=btn?btn.textContent:"";
+  if(btn){ btn.disabled=true; btn.textContent=t("rec_busy"); }
+  const restore=()=>{ if(btn){ btn.disabled=false; btn.textContent=label; } };
+  recProg(t("rec_prep")+" 0/"+txs.length);
+  try{
+    const todo=[]; let already=0, seenMsgs=0, asked=0;
+    // Ask Circle about several at a time and check the nonces in parallel;
+    // sequentially this was about a minute of apparent silence for 37 burns.
+    for(let i=0;i<txs.length;i+=6){
+      await Promise.all(txs.slice(i,i+6).map(async tx=>{
+        try{
+          const r=await fetch(IRIS+"/messages/"+ARC_DOMAIN+"?transactionHash="+tx);
+          const d=await r.json();
+          const done=((d&&d.messages)||[]).filter(m=>m.status==="complete"
+            &&String(m.attestation||"").startsWith("0x"));
+          seenMsgs+=done.length;
+          const used=await Promise.all(done.map(async m=>{
+            const n=msgNonce(m);
+            if(!n) return false;
+            try{ return numHex(await baseCall(TRANSMITTER,SEL.usedNonces+pad32(n)))>0n; }
+            catch(e){ return false; }
+          }));
+          done.forEach((m,k)=>{ if(used[k]) already++; else todo.push(m); });
+        }catch(e){}
+        asked++;
+        recProg(t("rec_prep")+" "+asked+"/"+txs.length+" · "+todo.length);
+      }));
+    }
+    if(!todo.length){
+      txs.forEach(markMinted); updateRecBadge(); restore();
+      recProg('<span style="color:var(--ok)"><b>'+t("rec_nothing")+'</b></span> '
+        +already+"/"+seenMsgs);
+      return;
+    }
+    // Say what is happening before the wallet popup: that is the one moment the
+    // user has to act, and silence there reads as a hang.
+    const done=await mintAll(todo,BASE_CHAIN_ID,(phase,n,total,size)=>{
+      // Count the confirmations, not just the pieces: "서명 2/4" is what the
+      // user is actually living through.
+      const sigNo=Math.floor(n/Math.max(1,size))+1;
+      const sigTot=Math.max(sigNo,Math.ceil(total/Math.max(1,size)));
+      if(phase==="wallet") recProg(t("rec_wallet")+"<br>"+t("sig_about")+" "+sigNo+"/"+sigTot
+        +" · "+(n+1)+"~"+Math.min(n+size,total)+"/"+total+t("rec_pieces"));
+      else if(phase==="smaller") recProg(t("rec_retry")+" "+size);
+      else recProg(t("rec_sending")+" "+n+"/"+total+t("rec_pieces"));
+    });
+    if(done===todo.length) txs.forEach(markMinted);
+    updateRecBadge(); restore();
+    recProg('<span style="color:var(--ok)"><b>'+t("rec_done")+'</b></span> '+(already+done)+"/"+seenMsgs);
+    await refreshBalances();
+  }catch(e){ restore(); recProg(humanError(e)); }
+}
+
+/* ============ cash out leftover tokens (Arc DEX -> USDC) ============
+   For users who bought memecoins on Arc and want to leave with USDC. The quote
+   picks whichever pool holds the most USDC (a shallow decoy pool would quote a
+   fake high price), and the slippage estimate warns before a thin pool eats the
+   trade. Selling still enforces a min-received on-chain, so a bad fill reverts. */
+let HOLDINGS=[];
+function decStr(hex){ if(!hex||hex==="0x")return "?"; const b=strip(hex);
+  if(b.length>=128){ const len=parseInt(b.slice(64,128),16); let s="";
+    for(let i=0;i<len;i++) s+=String.fromCharCode(parseInt(b.substr(128+i*2,2),16)); return s; } return "?"; }
+async function poolsFor(token){
+  const out=[];
+  try{ const r=await ethCall(V2_FACTORY,SEL.getPair+pad32(token)+pad32(ARC_USDC));
+    if(r&&numHex(r)) out.push({kind:"V2",fee:0,addr:"0x"+r.slice(-40)}); }catch(e){}
+  for(const fee of FEE_TIERS){ try{
+    const r=await ethCall(V3_FACTORY,SEL.getPool+pad32(token)+pad32(ARC_USDC)+pad32(hexNum(fee)));
+    if(r&&numHex(r)) out.push({kind:"V3",fee,addr:"0x"+r.slice(-40)}); }catch(e){} }
+  for(const p of out){ try{ p.usdc=numHex(await ethCall(ARC_USDC,SEL.balanceOf+pad32(p.addr)));
+    p.tok=numHex(await ethCall(token,SEL.balanceOf+pad32(p.addr))); }catch(e){ p.usdc=0n;p.tok=0n; } }
+  out.sort((a,b)=>(b.usdc>a.usdc?1:b.usdc<a.usdc?-1:0)); return out;
+}
+function quoteFromPool(p,amt){ if(!p||!p.tok||!p.usdc)return 0n; const f=amt*99n/100n; return f*p.usdc/(p.tok+f); }
+// Total loss vs the pool's spot price (pool fee + price impact), as a percent.
+function slippagePct(p,amt){
+  if(!p||!p.tok||!p.usdc||amt<=0n) return 0;
+  const r=Number(amt)/Number(p.tok);           // trade size relative to token reserve
+  const ratio=0.99/(1+0.99*r);                 // out / out-at-spot
+  return Math.max(0,(1-ratio)*100);
+}
+function slipClass(s){ return s<2?"low":s<6?"mid":s<15?"high":"vhigh"; }
+function slipLabel(s){ return t(s<2?"co_slip_low":s<6?"co_slip_mid":s<15?"co_slip_high":"co_slip_vhigh"); }
+
+async function loadHoldings(){
+  if(!ACCT){ $("co-list").innerHTML='<div class="mnote" style="color:var(--dim)">'+t("cta_connect")+'</div>'; return; }
+  $("co-msg").textContent=""; $("co-list").innerHTML='<div class="mnote" style="color:var(--dim)">'+t("co_scanning")+'</div>';
+  const head=Number(numHex(await rpcRead("eth_blockNumber",[])));
+  const seen=new Set(), padded="0x"+pad32(ACCT);
+  for(let w=0;w<16;w++){ const to=head-w*20000, from=to-19999;
+    for(const topics of [[TRANSFER_TOPIC,null,padded],[TRANSFER_TOPIC,padded]]){
+      try{ const logs=await rpcRead("eth_getLogs",[{topics,fromBlock:hexNum(Math.max(0,from)),toBlock:hexNum(to)}]);
+        (logs||[]).forEach(l=>seen.add(l.address.toLowerCase())); }catch(e){} } }
+  seen.delete(ARC_USDC.toLowerCase());
+  HOLDINGS=[];
+  for(const tok of seen){ let bal=0n,dec=18,sym="?";
+    try{ bal=numHex(await ethCall(tok,SEL.balanceOf+pad32(ACCT))); if(bal===0n)continue;
+      dec=Number(numHex(await ethCall(tok,SEL.decimals)))||18; sym=decStr(await ethCall(tok,SEL.symbol));
+    }catch(e){ continue; }
+    const pools=await poolsFor(tok); const best=pools[0];
+    const quote=best?quoteFromPool(best,bal):0n;
+    HOLDINGS.push({tok,sym,dec,bal,best,quote,slip:best?slippagePct(best,bal):0}); }
+  HOLDINGS.sort((a,b)=>(b.quote>a.quote?1:-1));
+  renderCashout();
+}
+function renderCashout(){
+  const el=$("co-list");
+  const sellable=HOLDINGS.filter(h=>h.best&&h.quote>0n);
+  if(!HOLDINGS.length){ el.innerHTML='<div class="mnote" style="color:var(--dim)">'+t("co_none")+'</div>'; return; }
+  let total=0n; sellable.forEach(h=>total+=h.quote);
+  let html="";
+  if(sellable.length>1){
+    html+='<div class="cohead"><span>'+t("co_total")+'</span><b style="color:var(--ok)">'+usdc(total)+' USDC</b></div>'
+      +'<button class="sbtn primary" id="co-all" style="width:100%;margin-top:6px">'+t("co_sellall")+'</button>';
+  }
+  HOLDINGS.forEach((h,i)=>{
+    const tail=h.tok.slice(-4), qty=(Number(h.bal)/10**h.dec);
+    if(!h.best||h.quote===0n){
+      html+='<div class="corow"><div class="cotop"><span><b>'+h.sym+'</b><span class="tail">…'+tail
+        +'</span></span><span class="amt"><span class="slip high">'+t("co_noliq")+'</span></span></div></div>';
+      return;
+    }
+    const s=h.slip, sc=slipClass(s);
+    let warn="";
+    if(sc==="high") warn='<div class="cowarn">'+t("co_warn_high")+'</div>';
+    if(sc==="vhigh") warn='<div class="cowarn vhigh">'+t("co_warn_vhigh")+'</div>';
+    html+='<div class="corow">'
+      +'<div class="cotop"><span><b>'+h.sym+'</b><span class="tail">…'+tail+'</span></span>'
+      +'<span class="amt"><b>'+usdc(h.quote)+' USDC</b></span></div>'
+      +'<div class="cometa"><span>'+qty.toLocaleString(undefined,{maximumFractionDigits:4})+' '+h.sym+'</span>'
+      +'<span>'+t("co_slip")+' <span class="slip '+sc+'">'+s.toFixed(1)+'% · '+slipLabel(s)+'</span></span></div>'
+      +warn
+      +'<div class="cobtns"><button class="sbtn" data-sell1="'+i+'">'+t("co_sell1")+'</button></div>'
+      +'</div>';
+  });
+  el.innerHTML=html;
+  const all=$("co-all"); if(all) all.onclick=()=>sellAll();
+  el.querySelectorAll("[data-sell1]").forEach(b=>b.onclick=()=>sellOne(Number(b.getAttribute("data-sell1"))));
+}
+async function swapToken(h){
+  // Re-quote right before selling; abort if the best pool moved or the quote
+  // swung, then enforce a 5% min-out on-chain so a bad fill reverts.
+  const fresh=await poolsFor(h.tok); const best2=fresh[0]; const q2=quoteFromPool(best2,h.bal);
+  if(!best2||q2===0n) throw new Error(t("co_noliq"));
+  if(best2.addr.toLowerCase()!==h.best.addr.toLowerCase()) throw new Error(t("co_unstable"));
+  const diff=h.quote>q2?h.quote-q2:q2-h.quote;
+  if(h.quote>0n&&diff*100n/h.quote>25n) throw new Error(t("co_unstable"));
+  const minOut=q2*95n/100n;
+  const spender=(best2.kind==="V3")?V3_APPROVE_SPENDER:V2_ROUTER;
+  const cur=numHex(await ethCall(h.tok,SEL.allowance+pad32(ACCT)+pad32(spender)));
+  if(cur<h.bal){ const tx=await sendTx(h.tok,SEL.approve+pad32(spender)+pad32(hexNum(h.bal)),ARC_CHAIN_ID);
+    await waitReceipt(tx,ARC_CHAIN_ID); }
+  let data,target;
+  if(best2.kind==="V3"){ data=SEL.swapExactInput+pad32(V3_ROUTER)+pad32(h.tok)+pad32(ARC_USDC)
+    +pad32(hexNum(best2.fee))+pad32(hexNum(h.bal))+pad32(hexNum(minOut)); target=SWAP_HELPER;
+  }else{ const dl=BigInt(Math.floor(Date.now()/1000)+1800);
+    data=SEL.swapExactTokensForTokens+pad32(hexNum(h.bal))+pad32(hexNum(minOut))+pad32(hexNum(160))
+      +pad32(ACCT)+pad32(hexNum(dl))+pad32(hexNum(2))+pad32(h.tok)+pad32(ARC_USDC); target=V2_ROUTER; }
+  const before=numHex(await ethCall(ARC_USDC,SEL.balanceOf+pad32(ACCT)));
+  const stx=await sendTx(target,data,ARC_CHAIN_ID); await waitReceipt(stx,ARC_CHAIN_ID);
+  const after=numHex(await ethCall(ARC_USDC,SEL.balanceOf+pad32(ACCT)));
+  return after>before?after-before:0n;
+}
+async function sellOne(i){
+  const h=HOLDINGS[i]; if(!h||!h.best) return;
+  $("co-msg").innerHTML=t("co_selling");
+  try{ const got=await swapToken(h);
+    $("co-msg").innerHTML='<span style="color:var(--ok)"><b>'+t("co_done")+'</b></span> +'+usdc(got)+' USDC';
+    await loadHoldings(); await refreshBalances();
+  }catch(e){ $("co-msg").innerHTML='<span style="color:var(--bad)">'+humanError(e)+'</span>'; }
+}
+async function sellAll(){
+  const list=HOLDINGS.filter(h=>h.best&&h.quote>0n);
+  let done=0, got=0n;
+  for(const h of list){
+    $("co-msg").innerHTML=t("co_selling")+" "+(done+1)+"/"+list.length+" ("+h.sym+")";
+    try{ got+=await swapToken(h); done++; }
+    catch(e){ /* skip the ones that fail (thin/unstable), keep going */ }
+  }
+  $("co-msg").innerHTML='<span style="color:var(--ok)"><b>'+t("co_done")+'</b></span> '
+    +done+"/"+list.length+" · +"+usdc(got)+" USDC";
+  await loadHoldings(); await refreshBalances();
+}
+
+/* ============ direction / wiring ============ */
+function applyDir(){
+  renderChips(); renderBalances(); renderDetails(); updateCTA();
+}
+$("from-chain").onclick=()=>{ if(DIR==="in"&&!RUNNING) openChainPicker(false); };
+$("to-chain").onclick=()=>{ if(DIR==="out"&&!RUNNING) openChainPicker(true); };
+$("addr-edit").onclick=()=>{
+  const row=$("row-custaddr");
+  row.hidden=!row.hidden;
+  if(!row.hidden){ $("custaddr").value=RECIP||ACCT||""; $("custaddr").focus(); }
+  else { RECIP=null; $("addr-warn").textContent=""; $("addr-warn").className="addrwarn";
+         renderDetails(); }
+};
+$("custaddr").oninput=()=>{
+  const v=$("custaddr").value.trim();
+  const w=$("addr-warn");
+  if(!v){ RECIP=null; w.textContent=""; w.className="addrwarn"; renderDetails(); return; }
+  if(!ADDR_RE.test(v)){
+    RECIP=null; w.textContent=t("d_addr_bad"); w.className="addrwarn bad";
+  }else if(ACCT&&v.toLowerCase()===ACCT.toLowerCase()){
+    RECIP=null; w.textContent=t("d_addr_self"); w.className="addrwarn";
+  }else{
+    RECIP=v; w.textContent=t("d_addr_diff"); w.className="addrwarn ok";
+  }
+  renderDetails(); updateCTA();
+};
+$("dirswap").onclick=()=>{
+  if(RUNNING||!DEPOSITS_ENABLED) return;
+  DEP_ARMED=false;
+  DIR=DIR==="out"?"in":"out";
+  $("dirswap").classList.toggle("flip");
+  $("prog").hidden=true;
+  applyDir();
+};
+$("amount").oninput=()=>{ renderDetails(); updateCTA(); };
+$("maxbtn").onclick=async()=>{
+  if(!ACCT) return;
+  try{
+    if(DIR==="out"){
+      const b=numHex(await ethCall(ARC_USDC,SEL.balanceOf+pad32(ACCT)));
+      const keep=1000000n; const v=b>keep?b-keep:0n;   // leave 1 USDC for gas
+      $("amount").value=(Number(v)/1e6).toFixed(6);
+    }else{
+      const b=numHex(await baseCall(BASE_USDC,SEL.balanceOf+pad32(ACCT)));
+      $("amount").value=(Number(b)/1e6).toFixed(6);
+    }
+    renderDetails(); updateCTA();
+  }catch(e){ alert(e.message); }
+};
+let DEP_ARMED=false;   // retained: harmless, and re-armed if a slow lane ever returns
+$("cta").onclick=()=>{
+  if(!ACCT){ connectFlow(); return; }
+  if(RUNNING) return;
+  if(DIR==="out") runExit(); else runDeposit();
+};
+$("h-wallet").onclick=()=>{
+  if(!ACCT){ connectFlow(); return; }
+  $("mm-addr").textContent=ACCT+(WNAME?"  ·  "+WNAME:"");
+  openM("m-menu");
+};
+$("mm-copy").onclick=async()=>{
+  try{ await navigator.clipboard.writeText(ACCT||""); $("mm-copy").textContent=t("mm_copied");
+    setTimeout(()=>{$("mm-copy").textContent=t("mm_copy");},1200); }catch(e){}
+};
+$("mm-switch").onclick=()=>{ closeM("m-menu"); switchAccount(); };
+$("mm-disc").onclick=disconnect;
+$("refresh").onclick=async()=>{
+  $("refresh").classList.add("spin");
+  try{ await Promise.all([refreshStatus(),refreshBalances()]); }
+  finally{ $("refresh").classList.remove("spin"); }
+};
+$("h-status").onclick=$("refresh").onclick;
+$("link-cashout").onclick=()=>{ $("co-msg").textContent=""; $("co-list").innerHTML=""; openM("m-cashout");
+  if(ACCT) loadHoldings().catch(e=>{$("co-msg").innerHTML=humanError(e);}); };
+$("co-scan").onclick=()=>loadHoldings().catch(e=>{$("co-msg").innerHTML=humanError(e);});
+$("link-history").onclick=()=>{ renderHistory(); openM("m-history"); };
+$("link-recover").onclick=()=>{
+  // Open on the one action that matters and start it, rather than presenting an
+  // empty field and two buttons with no indication of which comes first.
+  $("rec-msg").innerHTML=""; $("pending").innerHTML=""; recProg("");
+  $("rec-manual").hidden=true;
+  openM("m-recover");
+  if(ACCT) detectPending().catch(e=>recProg(humanError(e)));
+  else recProg(t("rec_conn2"));
+};
+$("rec-manual-t").onclick=()=>{ $("rec-manual").hidden=!$("rec-manual").hidden; };
+$("link-guide").onclick=()=>{ openM("m-guide"); markGuideSeen(); };
+/* First-visit prompt. The guide link sits in the footer, which a first-time
+   visitor does not read; the one thing they must know before signing is that
+   several confirmations are normal here, or the flow looks like an attack.
+   Shown once, remembered after it is opened. */
+function seenGuide(){ try{ return localStorage.getItem("arcGuideSeen")==="1"; }catch(e){ return true; } }
+function markGuideSeen(){ try{ localStorage.setItem("arcGuideSeen","1"); }catch(e){}
+  const el=$("first-hint"); if(el) el.hidden=true; }
+$("first-open").onclick=()=>{ openM("m-guide"); markGuideSeen(); };
+if(!seenGuide()){ const el=$("first-hint"); if(el) el.hidden=false; }
+
+$("link-how").onclick=()=>openM("m-how");
+$("link-deleg").onclick=()=>{ $("deleg-msg").textContent=""; $("deleg-list").innerHTML="";
+  openM("m-deleg"); if(ACCT) scanDelegation(); };
+$("btn-deleg-scan").onclick=()=>scanDelegation();
+$("btn-detect").onclick=()=>detectPending().catch(e=>{$("pending").textContent=e.message;});
+$("btn-recover").onclick=()=>recover(true);
+$("btn-check").onclick=()=>recover(false);
+document.querySelectorAll(".lang button").forEach(b=>
+  b.onclick=()=>{ LANG=b.getAttribute("data-lang");
+    try{ localStorage.setItem("arcExitLang",LANG); }catch(e){}
+    applyLang(); });
+
+function refreshAll(){ refreshBalances(); renderDetails(); updateCTA(); }
+
+/* ============ init ============ */
+try{ const k=localStorage.getItem("arcExitSrc"); if(k) SRC=srcByKey(k);
+  const d=localStorage.getItem("arcExitDst"); if(d) DST=dstByKey(d); }catch(e){}
+applyLang();
+if(!DEPOSITS_ENABLED){ DIR="out"; $("dirswap").style.display="none"; }
+applyDir();
+$("build").textContent="["+BUILD+"]";
+updateRecBadge();
+refreshStatus();
+refreshInflight().catch(()=>{});   // surviving transfers show up even after a reload
+setTimeout(silentReconnect,350);
+setTimeout(silentReconnect,1200); // providers can announce late
+</script>
+</body>
+</html>

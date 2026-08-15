@@ -1,0 +1,30 @@
+Contact: https://arcexit.com/
+Expires: 2027-08-14T00:00:00.000Z
+Preferred-Languages: en, ko
+Canonical: https://arcexit.com/.well-known/security.txt
+
+# arcexit.com is a non-custodial USDC bridge for Arc mainnet (chain 5042).
+# It holds no funds, runs no backend, and stores no user data.
+# Every transaction is signed in the visitor's own wallet.
+#
+# Circle's official CCTP v2 deployments, identical on every supported chain:
+#   TokenMessengerV2     0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d
+#   MessageTransmitterV2 0x81D40F21F12A8F0E3252Bccb954D722d4c464B64
+#   TokenMinterV2        0xfd78EE919681417d192449715b2594ab58f5D002
+#
+# Two helper contracts published by this site. Arc caps a CCTP message at
+# 1 USDC, so a 400 USDC withdrawal is 400 separate burns and 400 separate
+# collections; these exist only to fold that into one signature each. Neither
+# custodies funds.
+#   ArcBatchExit (Arc)    0x83839c096c71f3af1732a3685adc1c33db8f661d
+#     Pulls exactly principal + fee, burns in a loop, sends the fee to a fixed
+#     recipient. No withdraw, rescue or sweep function exists. The fee is
+#     bounded by an immutable MAX_FEE_BPS = 500 (5.00%).
+#   ArcClaimBatch (Base)  0x174a6cf1382a2e496dbc642461711b59e5d4e0b7
+#     Calls MessageTransmitterV2.receiveMessage in a loop. It has no owner, no
+#     admin function, and never touches a token: funds go to the mintRecipient
+#     sealed inside each Circle-attested message, which it cannot alter.
+#
+# Token approvals are always for the exact amount being bridged; the site
+# never requests an unlimited allowance and never calls setApprovalForAll.
+# Source: https://github.com/bongbongcrypto/arc-bridge-site
