@@ -558,8 +558,8 @@ ko:{
   dep_fee_step:"수수료 전송", src_pick:"보내는 체인 선택", src_proven:"검증됨", src_nofee:"빠른 경로 무료",
   src_fee:"빠른 경로 수수료 몇 센트",
   src_note:"Arc로 들어오는 속도는 출발 체인이 아니라 경로에 좌우됩니다. 검증됨 표시는 실제 도착을 측정해 확인한 체인입니다.",
-  dst_pick:"받는 체인 선택", dst_free:"수수료 없음", dst_cheap:"가스 저렴",
-  dst_note:"Arc에서 나가는 것은 어느 체인이든 수수료가 없습니다. 도착 체인에서 수령 트랜잭션 가스만 내므로, 가스가 싼 체인을 고르는 편이 낫습니다.", fee_upto:"최대", fee_net:"Circle 네트워크 수수료",
+  dst_pick:"받는 체인 선택", dst_free:"Circle 수수료 0", dst_cheap:"가스 저렴",
+  dst_note:"여기 표시된 0은 Circle 네트워크 수수료를 말합니다. 서비스 수수료는 별도이며 위 금액에 포함되어 있습니다. 그 외에는 도착 체인에서 수령 트랜잭션 가스만 내므로, 가스가 싼 체인을 고르는 편이 낫습니다.", fee_upto:"최대", fee_net:"Circle 네트워크 수수료",
   d_route:"경로", route_v:"Circle CCTP v2 (공식 소각·발행)",
   d_time:"예상 시간", d_split:"분할", tip_opt_a:"", tip_opt_b:"를 보내면 소수점 나머지가 없어져 서명이 한 번 줄어듭니다.", d_status:"브릿지 상태",
   st_checking:"확인 중", st_open:"지금 사용 가능", st_shut:"지금 이용 불가", st_unknown:"확인 실패",
@@ -676,8 +676,8 @@ en:{
   dep_fee_step:"sending fee", src_pick:"Choose source chain", src_proven:"measured", src_nofee:"fast lane free",
   src_fee:"fast lane costs a few cents",
   src_note:"Speed into Arc depends on the lane, not the chain. Chains marked measured are ones whose arrivals were timed.",
-  dst_pick:"Choose destination", dst_free:"no fee", dst_cheap:"cheap gas",
-  dst_note:"Leaving Arc is free to every chain. You only pay gas for the claim on the destination, so a cheap-gas chain is the better pick.", fee_upto:"up to", fee_net:"Circle network fee",
+  dst_pick:"Choose destination", dst_free:"Circle fee 0", dst_cheap:"cheap gas",
+  dst_note:"The zero shown here is Circle's network fee. The service fee is separate and already included in the amount above. Beyond that you only pay gas for the claim on the destination, so a cheap-gas chain is the better pick.", fee_upto:"up to", fee_net:"Circle network fee",
   d_route:"Route", route_v:"Circle CCTP v2 (official burn & mint)",
   d_time:"Est. time", d_split:"Split", tip_opt_a:"Sending ", tip_opt_b:" instead leaves no fractional piece, saving one signature.", d_status:"Bridge status",
   st_checking:"checking", st_open:"Working now", st_shut:"Unavailable now", st_unknown:"can't check",
@@ -794,8 +794,8 @@ zh:{
   dep_fee_step:"发送手续费", src_pick:"选择来源链", src_proven:"已实测", src_nofee:"快速通道免费",
   src_fee:"快速通道仅几分钱",
   src_note:"到 Arc 的速度取决于通道而非来源链。标注已实测的链是经过到账计时验证的。",
-  dst_pick:"选择接收链", dst_free:"无手续费", dst_cheap:"gas 便宜",
-  dst_note:"从 Arc 转出到任何链都免手续费。你只需支付目标链的领取 gas，因此选 gas 便宜的链更划算。", fee_upto:"最多", fee_net:"Circle 网络费",
+  dst_pick:"选择接收链", dst_free:"Circle 费用 0", dst_cheap:"gas 便宜",
+  dst_note:"此处显示的 0 指 Circle 网络费。服务手续费另计，且已包含在上方金额中。除此之外只需支付目标链的领取 gas，因此选 gas 便宜的链更划算。", fee_upto:"最多", fee_net:"Circle 网络费",
   d_route:"路径", route_v:"Circle CCTP v2（官方销毁·铸造）",
   d_time:"预计时间", d_split:"拆分", tip_opt_a:"改为发送 ", tip_opt_b:" 可消除小数余额，少签名一次。", d_status:"桥接状态",
   st_checking:"检查中", st_open:"现在可用", st_shut:"当前不可用", st_unknown:"无法确认",
@@ -929,6 +929,18 @@ const BASE_RPCS=["https://mainnet.base.org","https://base.llamarpc.com","https:/
    pinning users to Base, let them pick a source. `fastFee` is Circle's own
    published price for the fast lane into Arc; zero means the fast lane costs
    nothing from that chain. */
+/* Claim contract per destination chain. Collecting is one receiveMessage per
+   message, and Arc caps a message at 1 USDC, so without a contract on the
+   destination a 400 USDC withdrawal is 400 confirmations there - which is not a
+   feature, it is a trap. A chain is only offered once its contract exists, so
+   this map is the single place that decides which destinations are open. */
+const CLAIM_CONTRACTS={
+  8453:"0x174a6cf1382a2e496dbc642461711b59e5d4e0b7",   // Base
+};
+function claimFor(chainId){ return CLAIM_CONTRACTS[chainId]||""; }
+// Kept for the places that still speak of "the" claim contract on Base.
+const CLAIM_CONTRACT=CLAIM_CONTRACTS[8453];
+
 const SOURCES=[
   {key:"base", name:"Base", chainId:8453, hex:"0x2105", domain:6, fastFee:0.325,
    usdc:"0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", proven:false,
@@ -948,8 +960,12 @@ const SOURCES=[
 ];
 SOURCES.forEach(s=>{ s.gas = (s.key==="eth") ? "high" : "low"; });
 let SRC=SOURCES.find(s=>s.proven)||SOURCES[0];
-let DST=SOURCES[0];          // withdrawal destination; Arc->any is free
-function dstByKey(k){ return SOURCES.find(s=>s.key===k)||SOURCES[0]; }
+let DST=(SOURCES.filter(s=>CLAIM_CONTRACTS[s.chainId])[0])||SOURCES[0];   // only chains we can collect on
+/* Only chains with a claim contract may be chosen as a destination. Listing a
+   chain we cannot collect on cheaply would quote 402 signatures and call it an
+   option. */
+function dstChains(){ return SOURCES.filter(s=>claimFor(s.chainId)); }
+function dstByKey(k){ const l=dstChains(); return l.find(s=>s.key===k)||l[0]||SOURCES[0]; }
 function srcByKey(k){ return SOURCES.find(s=>s.key===k)||SOURCES[0]; }
 // Set after deploying the batch contract; empty = one burn per message, fee 0.
 const BATCH_CONTRACT="0x83839c096c71f3af1732a3685adc1c33db8f661d";
@@ -1098,7 +1114,7 @@ function listWallets(){
 }
 
 /* Shown in the footer so a stale cached page is obvious at a glance. */
-const BUILD="b83";
+const BUILD="b85";
 let PROVIDER=null, ACCT=null, WNAME="", DIR="out", RUNNING=false;
 let STATUS="checking", ATTEST={done:0,total:0}, LIMIT_ARC=1000000n;
 let ARC_BAL=null, BASE_BAL=null;
@@ -1261,7 +1277,10 @@ async function silentReconnect(){
    price so the choice is informed rather than blind. */
 function openChainPicker(forDest){
   const list=$("src-list"); list.innerHTML="";
-  SOURCES.forEach(s=>{
+  // Destinations are limited to chains with a claim contract. Offering one
+  // without it quoted 402 signatures for a 400 USDC exit, which is not a choice
+  // a user should be given.
+  (forDest?dstChains():SOURCES).forEach(s=>{
     const b=document.createElement("button");
     b.innerHTML='<span class="wicon" style="background:none">'+logoFor(s)+'</span>'
       +'<span><b>'+s.name+'</b>'
@@ -1497,7 +1516,7 @@ function renderDetails(){
       let src,dst;
       if(BATCH_CONTRACT){ src=1+batchCalls(eff,LIMIT_ARC); }   // approve + batchExit calls
       else{ src=WALLET_BATCH?2:(n+1); }
-      if(CLAIM_CONTRACT&&DST.chainId===BASE_CHAIN_ID) dst=Math.ceil(n/Math.max(1,CLAIM_PER_CALL));
+      if(claimFor(DST.chainId)) dst=Math.ceil(n/Math.max(1,CLAIM_PER_CALL));
       else dst=WALLET_BATCH?Math.ceil(n/Math.max(1,batchHint(DST.chainId))):n;
       const sigs=src+dst;
       $("det-split").textContent=n+" × "+usdc(LIMIT_ARC)+" USDC · "
@@ -2329,7 +2348,6 @@ const MINT_BATCH_DEFAULT=100;
    itself: one signature, bounded only by the block. It holds nothing, approves
    nothing and cannot redirect a transfer - funds go to the mintRecipient sealed
    inside each attested message. Deployed on Base. */
-const CLAIM_CONTRACT="0x174a6cf1382a2e496dbc642461711b59e5d4e0b7";
 let CLAIM_LAST_ERROR="";
 const SEL_CLAIM="0xf415c5e5";   // claim(bytes[],bytes[])
 // A dynamic bytes element: its length, then the data padded to a 32-byte boundary.
@@ -2375,7 +2393,7 @@ async function mintSignatures(count,chainId){
   if(count<1) return 0;
   if(count===1) return 1;
   let per=1;
-  if(CLAIM_CONTRACT&&chainId===BASE_CHAIN_ID){ per=await claimPerCall(); }
+  if(claimFor(chainId)){ per=await claimPerCall(); }
   else{ try{ if(await walletBatchOK(hexNum(chainId))) per=batchHint(chainId); }catch(e){} }
   return Math.ceil(count/Math.max(1,per));
 }
@@ -2386,14 +2404,15 @@ async function mintAll(msgs,chainId,onProg){
 
   // Preferred route: one ordinary transaction that loops inside the contract.
   // No wallet batching, so no undocumented wallet ceiling to run into.
-  if(CLAIM_CONTRACT&&chainId===BASE_CHAIN_ID&&total>1){
+  const claimAddr=claimFor(chainId);
+  if(claimAddr&&total>1){
     try{
       const per=Math.min(total,await claimPerCall());
       let sent=0;
       for(let i=0;i<msgs.length;i+=per){
         const grp=msgs.slice(i,i+per);
         onProg&&onProg("wallet",sent,total,grp.length);
-        const tx=await sendTx(CLAIM_CONTRACT,encodeClaim(grp),chainId,grp.length*180000+120000);
+        const tx=await sendTx(claimAddr,encodeClaim(grp),chainId,grp.length*180000+120000);
         await waitReceipt(tx,chainId);
         sent+=grp.length;
         onProg&&onProg("sending",sent,total,per);
