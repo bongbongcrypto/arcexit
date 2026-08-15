@@ -539,6 +539,7 @@ const I18N={
 ko:{
   m_guide_t:"사용법", l_guide:"사용법",
   v_source:"소스 코드",
+  dep_off_t:"입금은 현재 제공하지 않습니다.", dep_off_b:"다른 체인에서 Arc로 들어오는 경로는 도착이 며칠씩 지연되는 것이 확인돼 막아뒀습니다. 이 화면은 Arc에서 빼내는 출금만 지원합니다.",
   g_first:"처음이신가요? 서명이 여러 번 뜨는 이유와 절차를 먼저 확인하십시오.",
   g_intro:"Arc에 있는 USDC를 다른 체인으로 빼는 도구입니다. 자금은 항상 본인 지갑에서만 서명되고, 이 사이트는 자금을 보관하지 않습니다.",
   g_s1_t:"1. 지갑 연결", g_s1_b:"우상단 버튼을 누르고 Arc USDC가 들어 있는 지갑을 고릅니다. Arc 네트워크가 없으면 지갑이 추가할지 물어봅니다.",
@@ -656,6 +657,7 @@ ko:{
 en:{
   m_guide_t:"How to use", l_guide:"How to use",
   v_source:"Source code",
+  dep_off_t:"Deposits are not offered.", dep_off_b:"The inbound direction was observed to take days to arrive, so it is disabled. This page only moves funds out of Arc.",
   g_first:"First time here? See why several signatures appear, and what the steps are.",
   g_intro:"A tool for moving USDC out of Arc to another chain. Every transaction is signed in your own wallet; this site never holds your funds.",
   g_s1_t:"1. Connect a wallet", g_s1_b:"Press the button top right and pick the wallet holding your Arc USDC. If Arc is not in your wallet yet, it will offer to add it.",
@@ -773,6 +775,7 @@ en:{
 zh:{
   m_guide_t:"使用方法", l_guide:"使用方法",
   v_source:"源代码",
+  dep_off_t:"暂不提供充值。", dep_off_b:"经确认，从其他链转入 Arc 的到账会延迟数天，因此已停用。本页面仅支持从 Arc 转出。",
   g_first:"第一次使用？请先了解为什么会多次签名以及具体步骤。",
   g_intro:"用于把 Arc 上的 USDC 转出到其他链。所有交易都在你自己的钱包中签名，本站不保管任何资金。",
   g_s1_t:"1. 连接钱包", g_s1_b:"点击右上角按钮，选择持有 Arc USDC 的钱包。若钱包中没有 Arc 网络，会提示添加。",
@@ -950,11 +953,14 @@ function dstByKey(k){ return SOURCES.find(s=>s.key===k)||SOURCES[0]; }
 function srcByKey(k){ return SOURCES.find(s=>s.key===k)||SOURCES[0]; }
 // Set after deploying the batch contract; empty = one burn per message, fee 0.
 const BATCH_CONTRACT="0x83839c096c71f3af1732a3685adc1c33db8f661d";
-// Deposits are OFF. Live 0.1 tests proved raw CCTP burns are not picked up by
-// Circle's relayer (it serves app-mediated transfers only) and wait for a
-// multi-day sweep. Until we have a rail that demonstrably delivers within the
-// promised time, this direction is not sellable.
-const DEPOSITS_ENABLED=/[?&]indev/.test(location.search);
+/* Deposits are OFF, and not merely hidden. Live 0.1 tests proved raw CCTP burns
+   are not picked up by Circle's relayer (it serves app-mediated transfers only)
+   and instead wait for a multi-day sweep. This used to be reachable by adding
+   ?indev to the URL, which is no protection at all: the flag sits in the source
+   every visitor already downloads, so a curious user could turn on the one path
+   known to strand funds for days. Nothing but a rail that demonstrably delivers
+   should flip this back. */
+const DEPOSITS_ENABLED=false;
 /* Operator path. The batch contract is what normally enforces the exemption,
    but it is not deployed yet, so a locally served copy moves the operator's own
    funds at cost. Gated on the hostname, so the live site is unaffected and this
@@ -1092,7 +1098,7 @@ function listWallets(){
 }
 
 /* Shown in the footer so a stale cached page is obvious at a glance. */
-const BUILD="b81";
+const BUILD="b83";
 let PROVIDER=null, ACCT=null, WNAME="", DIR="out", RUNNING=false;
 let STATUS="checking", ATTEST={done:0,total:0}, LIMIT_ARC=1000000n;
 let ARC_BAL=null, BASE_BAL=null;
@@ -2164,6 +2170,10 @@ async function runExitBatch(amount,recipient,cap){
    chain we support, each needing its own gas. The user signs one extra
    transfer instead, and the amount they typed is what leaves their balance. */
 async function runDeposit(){
+  // Hiding the UI is not disabling the path: the function stays callable from a
+  // console, and this is the one direction known to strand funds for days. Stop
+  // at the door rather than relying on nothing reaching it.
+  if(!DEPOSITS_ENABLED){ say(banner("warn",'<b>'+t("dep_off_t")+'</b><br>'+t("dep_off_b"))); return; }
   const typed=parseUsdc($("amount").value);
   // An exempt wallet bridges the whole amount, so principal is not reduced.
   const exempt=await isFeeExempt(ACCT);
